@@ -1,0 +1,153 @@
+{
+  "hardware": "Apple Silicon (MPS/Metal)",
+  "mps_available": true,
+  "resolutions": {
+    "Preview_256x384": {
+      "width": 384,
+      "height": 256,
+      "stages": {
+        "Oklab_Gamut_Bisection": {
+          "kernel": "Oklab_Gamut_Bisection",
+          "mean_ms": 1.83,
+          "std_ms": 0.29,
+          "p50_ms": 1.8,
+          "p95_ms": 2.2
+        },
+        "Diffuse_Orientation": {
+          "kernel": "Diffuse_Orientation",
+          "mean_ms": 0.46,
+          "std_ms": 0.17,
+          "p50_ms": 0.43,
+          "p95_ms": 0.72
+        },
+        "Guided_Filter_Convolutions": {
+          "kernel": "Guided_Filter_Convolutions",
+          "mean_ms": 0.55,
+          "std_ms": 0.13,
+          "p50_ms": 0.56,
+          "p95_ms": 0.74
+        },
+        "MultiScale_HBAO": {
+          "kernel": "MultiScale_HBAO",
+          "mean_ms": 0.49,
+          "std_ms": 0.15,
+          "p50_ms": 0.49,
+          "p95_ms": 0.67
+        },
+        "Radiance_Compositing": {
+          "kernel": "Radiance_Compositing",
+          "mean_ms": 0.21,
+          "std_ms": 0.01,
+          "p50_ms": 0.21,
+          "p95_ms": 0.22
+        }
+      },
+      "total_pipeline": {
+        "p50_ms": 3.49,
+        "p95_ms": 4.55,
+        "fps_p50": 286.5,
+        "gpu_vram_mb": 2.6,
+        "cpu_rss_mb": 380.1,
+        "interactive_gate_35ms": "PASS"
+      }
+    },
+    "FHD_1080p": {
+      "width": 1920,
+      "height": 1080,
+      "stages": {
+        "Oklab_Gamut_Bisection": {
+          "kernel": "Oklab_Gamut_Bisection",
+          "mean_ms": 20.89,
+          "std_ms": 0.07,
+          "p50_ms": 20.89,
+          "p95_ms": 21.02
+        },
+        "Diffuse_Orientation": {
+          "kernel": "Diffuse_Orientation",
+          "mean_ms": 2.8,
+          "std_ms": 0.04,
+          "p50_ms": 2.81,
+          "p95_ms": 2.87
+        },
+        "Guided_Filter_Convolutions": {
+          "kernel": "Guided_Filter_Convolutions",
+          "mean_ms": 1.24,
+          "std_ms": 0.04,
+          "p50_ms": 1.24,
+          "p95_ms": 1.3
+        },
+        "MultiScale_HBAO": {
+          "kernel": "MultiScale_HBAO",
+          "mean_ms": 5.97,
+          "std_ms": 0.05,
+          "p50_ms": 5.98,
+          "p95_ms": 6.05
+        },
+        "Radiance_Compositing": {
+          "kernel": "Radiance_Compositing",
+          "mean_ms": 1.15,
+          "std_ms": 0.03,
+          "p50_ms": 1.16,
+          "p95_ms": 1.2
+        }
+      },
+      "total_pipeline": {
+        "p50_ms": 32.08,
+        "p95_ms": 32.44,
+        "fps_p50": 31.2,
+        "gpu_vram_mb": 56.0,
+        "cpu_rss_mb": 381.9,
+        "interactive_gate_35ms": "PASS"
+      }
+    },
+    "UHD_4K": {
+      "width": 3840,
+      "height": 2160,
+      "stages": {
+        "Oklab_Gamut_Bisection": {
+          "kernel": "Oklab_Gamut_Bisection",
+          "mean_ms": 88.23,
+          "std_ms": 0.1,
+          "p50_ms": 88.22,
+          "p95_ms": 88.4
+        },
+        "Diffuse_Orientation": {
+          "kernel": "Diffuse_Orientation",
+          "mean_ms": 12.31,
+          "std_ms": 0.09,
+          "p50_ms": 12.3,
+          "p95_ms": 12.43
+        },
+        "Guided_Filter_Convolutions": {
+          "kernel": "Guided_Filter_Convolutions",
+          "mean_ms": 4.25,
+          "std_ms": 0.07,
+          "p50_ms": 4.25,
+          "p95_ms": 4.34
+        },
+        "MultiScale_HBAO": {
+          "kernel": "MultiScale_HBAO",
+          "mean_ms": 26.27,
+          "std_ms": 0.26,
+          "p50_ms": 26.16,
+          "p95_ms": 26.66
+        },
+        "Radiance_Compositing": {
+          "kernel": "Radiance_Compositing",
+          "mean_ms": 4.74,
+          "std_ms": 0.06,
+          "p50_ms": 4.75,
+          "p95_ms": 4.82
+        }
+      },
+      "total_pipeline": {
+        "p50_ms": 135.68,
+        "p95_ms": 136.65,
+        "fps_p50": 7.4,
+        "gpu_vram_mb": 224.0,
+        "cpu_rss_mb": 384.3,
+        "interactive_gate_35ms": "FAIL"
+      }
+    }
+  }
+}

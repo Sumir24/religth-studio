@@ -1,0 +1,11 @@
+config_id,config_name,mean_CGS,mean_SDG_px,mean_SBC,mean_SLR_pct,mean_SDE_px,mean_IoU,mean_REC_pct,mean_FOR_pct,mean_DCI,mean_latency_ms
+C1_contact_only,Contact Grounding Only,0.01,0.0,0.9118,0.405,45.5367,0.094,11.14,0.64,1.0,256.2627
+C2_ao_only,Ambient Occlusion Only,1.0,60.0,NOT_APPLICABLE,0.0,NOT_APPLICABLE,0.0,0.0,0.0,1.0,315.4619
+C3_diffuse_only,Diffuse Orientation Only,1.0,60.0,NOT_APPLICABLE,0.0,NOT_APPLICABLE,0.0,0.0,0.0,0.9994,229.863
+C4_self_only,Self-Occlusion Only,1.0,60.0,NOT_APPLICABLE,1.675,NOT_APPLICABLE,0.0,0.0,0.045,1.0,289.5723
+C5_cast_only,Cast Shadow Only,0.2777,0.0,0.9151,3.54,10.0,0.5095,62.5833,1.1325,0.9999,231.845
+C6_contact_plus_cast,Contact + Cast Shadow,0.01,0.0,0.9241,3.9275,15.2567,0.4646,66.0367,1.6,0.9999,262.1787
+C7_ao_plus_contact,AO + Contact Grounding,0.01,0.0,0.9118,0.405,45.5367,0.094,11.14,0.64,1.0,349.8831
+C8_full_comp_no_conf,Full Comp (No Confidence),0.01,0.0,0.9249,5.6025,15.2567,0.4646,66.0367,1.6475,0.9993,424.7581
+C9_full_comp_with_conf,Full Comp (Confidence Weighted),0.0616,0.0,0.9127,4.1675,15.8267,0.4494,64.0733,1.4375,0.9993,427.3138
+C10_full_comp_conf_fallback,Full Comp + Confidence Fallback,0.0616,0.0,0.9127,4.1675,15.8267,0.4494,64.0733,1.4375,0.9993,418.1579
