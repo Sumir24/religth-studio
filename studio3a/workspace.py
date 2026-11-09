@@ -27,6 +27,12 @@ from studio3a.camera import Camera3D
 from studio3a.lighting import RectangularAreaLight
 from studio3a.renderer import RenderBackend
 
+try:
+    from metal2.renderer import MetalRenderBackend
+    _HAS_METAL2 = True
+except Exception:
+    _HAS_METAL2 = False
+
 
 # ---------------------------------------------------------------------------
 # 1. VIRTUAL 3D STUDIO STAGE RENDERER (STAGE VIEWPORT)
@@ -201,11 +207,14 @@ class StudioWorkspaceSession:
     Session Controller orchestrating:
       • Active photograph, depth map, normal map, and mask
       • Authoritative SceneStateManager
-      • High-performance RenderBackend
+      • High-performance Metal GPU backend with CPU reference fallback
       • Viewport image generation and split comparisons
     """
-    def __init__(self, sample_image_path: Optional[str] = None):
-        self.backend = RenderBackend()
+    def __init__(self, sample_image_path: Optional[str] = None, use_metal: bool = True):
+        self.use_metal = use_metal and _HAS_METAL2
+        self.cpu_backend = RenderBackend()
+        self.metal_backend = MetalRenderBackend() if _HAS_METAL2 else None
+        self.backend = self.metal_backend if self.use_metal else self.cpu_backend
         self.state_manager = SceneStateManager(StudioScene())
         
         # Load default or sample photograph
@@ -214,6 +223,17 @@ class StudioWorkspaceSession:
         self.normals_path = "demo_output/nike_test/normals.png"
         
         self.load_assets(self.image_path, self.depth_path, self.normals_path)
+
+    def switch_backend(self, use_metal: bool) -> str:
+        """Toggles between native Metal GPU and CPU reference renderer."""
+        if use_metal and _HAS_METAL2:
+            self.use_metal = True
+            self.backend = self.metal_backend
+            return "Active Backend: Native Metal GPU (Apple Silicon)"
+        else:
+            self.use_metal = False
+            self.backend = self.cpu_backend
+            return "Active Backend: CPU Reference Renderer"
 
     def load_assets(self, img_path: str, depth_path: str, normals_path: str) -> None:
         """Loads and pre-processes input photograph, depth, and normal maps."""
@@ -317,6 +337,25 @@ class StudioWorkspaceSession:
         self.state_manager.push_state(scene)
         return self.execute_render(quality=RenderQuality.PREVIEW)
 
+    def update_receiver_params(
+        self,
+        receiver_type_str: str,
+        ground_y: float = 0.0,
+        cove_radius: float = 0.40,
+        cove_center_z: float = -0.80,
+        wall_z: float = -1.20
+    ) -> Dict[str, Any]:
+        """Artist manipulation action: updates receiver parameters."""
+        scene = self.state_manager.current_scene
+        scene.receiver.receiver_type = ReceiverType(receiver_type_str)
+        scene.receiver.ground_y = float(ground_y)
+        scene.receiver.cove_radius = float(cove_radius)
+        scene.receiver.cove_center_yz = [float(ground_y) + float(cove_radius), float(cove_center_z)]
+        scene.receiver.wall_z = float(wall_z)
+        
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
     def undo_action(self) -> Dict[str, Any]:
         """Reverts last artist modification."""
         self.state_manager.undo()
@@ -406,7 +445,12 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
                 receiver_type = gr.Dropdown(choices=["CYCLORAMA", "PLANE"], value="CYCLORAMA", label="Receiver Geometry")
 
             with gr.Column(scale=1):
-                gr.Subheader("5. Scene State & Serialization")
+                gr.Subheader("5. Scene State & Engine Backend")
+                backend_choice = gr.Radio(
+                    choices=["Metal GPU (Apple Silicon)", "CPU Reference Renderer"],
+                    value="Metal GPU (Apple Silicon)" if sess.use_metal else "CPU Reference Renderer",
+                    label="Active Compute Backend"
+                )
                 save_filename = gr.Textbox(value="studio_scene_preset.json", label="Scene File")
                 btn_save = gr.Button("💾 Save Scene JSON")
                 btn_load = gr.Button("📂 Load Scene JSON")
@@ -454,6 +498,20 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
             
         for ctrl in proxy_inputs:
             ctrl.change(on_proxy_change, inputs=proxy_inputs, outputs=[photo_display, stage_display, diag_box])
+
+        def on_receiver_change(rec_type_val):
+            res = sess.update_receiver_params(rec_type_val)
+            return update_ui("Relit Output", res)
+            
+        receiver_type.change(on_receiver_change, inputs=[receiver_type], outputs=[photo_display, stage_display, diag_box])
+
+        def on_backend_change(b_val):
+            use_m = "Metal" in b_val
+            msg = sess.switch_backend(use_m)
+            disp, stage, diag = update_ui("Relit Output")
+            return disp, stage, diag, msg
+            
+        backend_choice.change(on_backend_change, inputs=[backend_choice], outputs=[photo_display, stage_display, diag_box, status_box])
 
         viewport_mode.change(lambda m: update_ui(m), inputs=[viewport_mode], outputs=[photo_display, stage_display, diag_box])
         

@@ -218,3 +218,4 @@ To guarantee that RS-METAL-2 does not alter the mathematical behavior of the ref
 | **Superquadric numerical divergence in MSL** | GPU thread hang or NaN normals | Enforce bounded bracket line search ($N=32$ iterations max) with hard clamping on semi-axes and exponent arguments in MSL. |
 | **Threadgroup shared memory limits** | Kernel launch failure | Restrict threadgroup memory to $\le 16\text{ KB}$ per tile ($16 \times 16$ float4), well within Apple Silicon's 32 KB limit. |
 | **Floating-point rounding differences (FP32)** | Slight sub-pixel edge discrepancies | Verify against ground-truth ray tracer rather than requiring bitwise equality against CPU NumPy transcendental approximations. |
+

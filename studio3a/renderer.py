@@ -158,6 +158,7 @@ class RenderBackend:
         surface_pos = np.zeros((H, W, 3), dtype=np.float32)
         surface_norm = np.zeros((H, W, 3), dtype=np.float32)
         is_receiver = (~fg_mask) & rec_hit
+        is_sky = (~fg_mask) & (~rec_hit)
         
         # Foreground points
         surface_pos[fg_mask] = ray_o[fg_mask] + t_camera_depth[fg_mask, None] * ray_d[fg_mask]
@@ -166,6 +167,10 @@ class RenderBackend:
         # Receiver points
         surface_pos[is_receiver] = ray_o[is_receiver] + rec_t[is_receiver, None] * ray_d[is_receiver]
         surface_norm[is_receiver] = rec_norm[is_receiver]
+
+        # Explicit sky points (far projection to eliminate [0, 0, 0] coordinate collapse)
+        surface_pos[is_sky] = ray_o[is_sky] + 50.0 * ray_d[is_sky]
+        surface_norm[is_sky] = -ray_d[is_sky]
         
         # Normalize normals
         n_len = np.linalg.norm(surface_norm, axis=-1, keepdims=True)
@@ -185,6 +190,7 @@ class RenderBackend:
         # 5. Lighting & Direct Irradiance Integration
         total_irradiance = np.zeros((H, W, 3), dtype=np.float32)
         total_visibility = np.ones((H, W), dtype=np.float32)
+        active_surface_mask = fg_mask | is_receiver
         
         t_light_start = time.time()
         for light_data in scene.lights:
@@ -203,24 +209,27 @@ class RenderBackend:
                 enabled=light_data.enabled
             )
             
-            # Direct unshadowed irradiance
+            # Direct unshadowed irradiance on active surfaces
             irr = light.evaluate_unshadowed_irradiance(
                 surface_pos=surface_pos,
                 surface_norm=surface_norm,
                 n_samples=n_samples,
                 seed=42
             )
+            irr[is_sky] = 0.0
             total_irradiance += irr
             
-            # Geometric Direct Visibility (Cast Shadow + Self-Occlusion)
+            # Geometric Direct Visibility (Cast Shadow + Self-Occlusion + Receiver Occlusion)
             if scene.render_settings.enable_cast_shadows:
                 vis = shadow_engine.compute_direct_visibility(
                     surface_pos=surface_pos,
                     surface_norm=surface_norm,
                     light=light,
                     n_samples=n_samples,
-                    seed=42
+                    seed=42,
+                    active_mask=active_surface_mask
                 )
+                vis[is_sky] = 1.0
                 total_visibility = np.minimum(total_visibility, vis)
                 
         # 6. Contact Grounding Term

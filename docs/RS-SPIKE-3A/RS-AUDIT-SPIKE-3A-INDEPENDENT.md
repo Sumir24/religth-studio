@@ -149,3 +149,4 @@ The architecture established in RS-SPIKE-3A is mathematically defensible and for
 4. **UI Receiver Binding:** Wire `receiver_type` in `studio3a/workspace.py` to `session.update_receiver_params`.
 
 With these corrections clearly defined, we proceed to author the **RS-METAL-2 Implementation Plan**.
+
