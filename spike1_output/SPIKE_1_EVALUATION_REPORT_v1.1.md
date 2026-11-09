@@ -237,3 +237,4 @@ linear = srgb_to_linear(np.array(im, dtype=np.float32) / 255.0)
 ---
 *Report certified by Principal Computational Photography Researcher & Numerical Imaging Engineer.*  
 *Spike 1 concluded. Ready for Spike 2 initiation.*
+

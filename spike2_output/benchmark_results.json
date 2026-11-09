@@ -1,0 +1,170 @@
+{
+  "metrics": [
+    {
+      "test_case": "Scene_S1_Grounded_Sphere",
+      "lighting_profile": "Key_Long_Shadow",
+      "CGS": 0.1401,
+      "SDG_px": 0.0,
+      "SBC": 0.9767,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.28,
+      "FOR_pct": 0.62,
+      "DCI_shadow": 0.99975
+    },
+    {
+      "test_case": "Scene_S1_Grounded_Sphere",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.1364,
+      "SDG_px": 0.0,
+      "SBC": 0.9659,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.33,
+      "DCI_shadow": 0.99979
+    },
+    {
+      "test_case": "Scene_S1_Grounded_Sphere",
+      "lighting_profile": "Key_High_Noon",
+      "CGS": 0.1364,
+      "SDG_px": 0.0,
+      "SBC": 0.9623,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.31,
+      "DCI_shadow": 0.99977
+    },
+    {
+      "test_case": "Scene_S2_Hovering_h0px",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.1364,
+      "SDG_px": 0.0,
+      "SBC": 0.985,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.25,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.9997
+    },
+    {
+      "test_case": "Scene_S2_Hovering_h5px",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.5423,
+      "SDG_px": 0.0,
+      "SBC": 0.985,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.25,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.9997
+    },
+    {
+      "test_case": "Scene_S2_Hovering_h20px",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.6259,
+      "SDG_px": 0.0,
+      "SBC": 0.985,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.25,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.9997
+    },
+    {
+      "test_case": "Scene_S2_Hovering_h50px",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.7621,
+      "SDG_px": 2.0,
+      "SBC": 0.985,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.25,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.9997
+    },
+    {
+      "test_case": "Scene_S3_Step_Box_90deg_Cliff",
+      "lighting_profile": "Key_Medium_Ground",
+      "CGS": 0.4186,
+      "SDG_px": 0.0,
+      "SBC": 0.8911,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.18,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.99987
+    },
+    {
+      "test_case": "Case_R1_Sneaker",
+      "lighting_profile": "Warm_Key_Left",
+      "CGS": 0.1499,
+      "SDG_px": 0.0,
+      "SBC": 0.8815,
+      "SLR_pct": 0.0,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.9989
+    },
+    {
+      "test_case": "Case_R1_Sneaker",
+      "lighting_profile": "Cool_Rim_Right",
+      "CGS": 0.1499,
+      "SDG_px": 0.0,
+      "SBC": 0.892,
+      "SLR_pct": 0.61,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.99858
+    },
+    {
+      "test_case": "Case_R2_Classical_Statue",
+      "lighting_profile": "Warm_Key_Left",
+      "CGS": 0.1489,
+      "SDG_px": 0.0,
+      "SBC": 0.8995,
+      "SLR_pct": 3.67,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.98337
+    },
+    {
+      "test_case": "Case_R2_Classical_Statue",
+      "lighting_profile": "Cool_Rim_Right",
+      "CGS": 0.1318,
+      "SDG_px": 0.0,
+      "SBC": 0.9176,
+      "SLR_pct": 1.33,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.97601
+    },
+    {
+      "test_case": "Case_R3_Architectural_Relief",
+      "lighting_profile": "Warm_Key_Left",
+      "CGS": 0.1499,
+      "SDG_px": 0.0,
+      "SBC": 0.7798,
+      "SLR_pct": 0.03,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.99948
+    },
+    {
+      "test_case": "Case_R3_Architectural_Relief",
+      "lighting_profile": "Cool_Rim_Right",
+      "CGS": 0.15,
+      "SDG_px": 0.0,
+      "SBC": 0.8181,
+      "SLR_pct": 0.03,
+      "SDE_px": 0.0,
+      "FOR_pct": 0.0,
+      "DCI_shadow": 0.99948
+    }
+  ],
+  "latency_memory": {
+    "1080p": {
+      "p50_ms": 124.11,
+      "p95_ms": 131.2,
+      "working_set_peak_mb": 79.29
+    },
+    "4K": {
+      "p50_ms": 598.29,
+      "p95_ms": 634.96,
+      "working_set_peak_mb": 316.78
+    }
+  }
+}

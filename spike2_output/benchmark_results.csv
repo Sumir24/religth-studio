@@ -1,0 +1,15 @@
+test_case,lighting_profile,CGS,SDG_px,SBC,SLR_pct,SDE_px,FOR_pct,DCI_shadow
+Scene_S1_Grounded_Sphere,Key_Long_Shadow,0.1401,0.0,0.9767,0.0,0.28,0.62,0.99975
+Scene_S1_Grounded_Sphere,Key_Medium_Ground,0.1364,0.0,0.9659,0.0,0.0,0.33,0.99979
+Scene_S1_Grounded_Sphere,Key_High_Noon,0.1364,0.0,0.9623,0.0,0.0,0.31,0.99977
+Scene_S2_Hovering_h0px,Key_Medium_Ground,0.1364,0.0,0.985,0.0,0.25,0.0,0.9997
+Scene_S2_Hovering_h5px,Key_Medium_Ground,0.5423,0.0,0.985,0.0,0.25,0.0,0.9997
+Scene_S2_Hovering_h20px,Key_Medium_Ground,0.6259,0.0,0.985,0.0,0.25,0.0,0.9997
+Scene_S2_Hovering_h50px,Key_Medium_Ground,0.7621,2.0,0.985,0.0,0.25,0.0,0.9997
+Scene_S3_Step_Box_90deg_Cliff,Key_Medium_Ground,0.4186,0.0,0.8911,0.0,0.18,0.0,0.99987
+Case_R1_Sneaker,Warm_Key_Left,0.1499,0.0,0.8815,0.0,0.0,0.0,0.9989
+Case_R1_Sneaker,Cool_Rim_Right,0.1499,0.0,0.892,0.61,0.0,0.0,0.99858
+Case_R2_Classical_Statue,Warm_Key_Left,0.1489,0.0,0.8995,3.67,0.0,0.0,0.98337
+Case_R2_Classical_Statue,Cool_Rim_Right,0.1318,0.0,0.9176,1.33,0.0,0.0,0.97601
+Case_R3_Architectural_Relief,Warm_Key_Left,0.1499,0.0,0.7798,0.03,0.0,0.0,0.99948
+Case_R3_Architectural_Relief,Cool_Rim_Right,0.15,0.0,0.8181,0.03,0.0,0.0,0.99948
