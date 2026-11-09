@@ -46,7 +46,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.32
+      "latency_ms": 0.25
     },
     {
       "config_id": "A_C2_P1",
@@ -68,7 +68,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.32
+      "latency_ms": 0.25
     },
     {
       "config_id": "A_C3_P1",
@@ -90,7 +90,7 @@
       "chroma_loss_mean": 0.0057,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.32
+      "latency_ms": 0.25
     },
     {
       "config_id": "B_C1_P1",
@@ -112,7 +112,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 16.49
+      "latency_ms": 15.4
     },
     {
       "config_id": "B_C2_P1",
@@ -134,7 +134,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 16.49
+      "latency_ms": 15.4
     },
     {
       "config_id": "B_C3_P1",
@@ -156,7 +156,7 @@
       "chroma_loss_mean": 0.0056,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 16.49
+      "latency_ms": 15.4
     },
     {
       "config_id": "C_C1_P1",
@@ -178,7 +178,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 238,
       "neg_depth": -0.059089,
-      "latency_ms": 16.55
+      "latency_ms": 15.89
     },
     {
       "config_id": "C_C2_P1",
@@ -200,7 +200,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 238,
       "neg_depth": -0.059089,
-      "latency_ms": 16.55
+      "latency_ms": 15.89
     },
     {
       "config_id": "C_C3_P1",
@@ -222,7 +222,7 @@
       "chroma_loss_mean": 0.0057,
       "N_neg": 238,
       "neg_depth": -0.059089,
-      "latency_ms": 16.55
+      "latency_ms": 15.89
     },
     {
       "config_id": "D_C1_P1",
@@ -244,7 +244,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 1389,
       "neg_depth": -0.154137,
-      "latency_ms": 4.34
+      "latency_ms": 3.41
     },
     {
       "config_id": "D_C2_P1",
@@ -266,7 +266,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 1389,
       "neg_depth": -0.154137,
-      "latency_ms": 4.34
+      "latency_ms": 3.41
     },
     {
       "config_id": "D_C3_P1",
@@ -288,7 +288,7 @@
       "chroma_loss_mean": 0.0062,
       "N_neg": 1389,
       "neg_depth": -0.154137,
-      "latency_ms": 4.34
+      "latency_ms": 3.41
     },
     {
       "config_id": "E.1_C1_P1",
@@ -310,7 +310,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.09
+      "latency_ms": 19.84
     },
     {
       "config_id": "E.1_C2_P1",
@@ -332,7 +332,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.09
+      "latency_ms": 19.84
     },
     {
       "config_id": "E.1_C3_P1",
@@ -354,7 +354,7 @@
       "chroma_loss_mean": 0.005,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.09
+      "latency_ms": 19.84
     },
     {
       "config_id": "E.2_C1_P1",
@@ -376,7 +376,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 80.79
+      "latency_ms": 78.91
     },
     {
       "config_id": "E.2_C2_P1",
@@ -398,7 +398,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 80.79
+      "latency_ms": 78.91
     },
     {
       "config_id": "E.2_C3_P1",
@@ -420,7 +420,7 @@
       "chroma_loss_mean": 0.0052,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 80.79
+      "latency_ms": 78.91
     },
     {
       "config_id": "A_C1_P2",
@@ -442,7 +442,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.54
+      "latency_ms": 0.23
     },
     {
       "config_id": "A_C2_P2",
@@ -464,7 +464,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.54
+      "latency_ms": 0.23
     },
     {
       "config_id": "A_C3_P2",
@@ -486,7 +486,7 @@
       "chroma_loss_mean": 0.0172,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.54
+      "latency_ms": 0.23
     },
     {
       "config_id": "B_C1_P2",
@@ -508,7 +508,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 15.46
+      "latency_ms": 15.9
     },
     {
       "config_id": "B_C2_P2",
@@ -530,7 +530,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 15.46
+      "latency_ms": 15.9
     },
     {
       "config_id": "B_C3_P2",
@@ -552,7 +552,7 @@
       "chroma_loss_mean": 0.0172,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 15.46
+      "latency_ms": 15.9
     },
     {
       "config_id": "C_C1_P2",
@@ -574,7 +574,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 467,
       "neg_depth": -1.301994,
-      "latency_ms": 14.23
+      "latency_ms": 16.15
     },
     {
       "config_id": "C_C2_P2",
@@ -596,7 +596,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 467,
       "neg_depth": -1.301994,
-      "latency_ms": 14.23
+      "latency_ms": 16.15
     },
     {
       "config_id": "C_C3_P2",
@@ -618,7 +618,7 @@
       "chroma_loss_mean": 0.0172,
       "N_neg": 467,
       "neg_depth": -1.301994,
-      "latency_ms": 14.23
+      "latency_ms": 16.15
     },
     {
       "config_id": "D_C1_P2",
@@ -640,7 +640,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 3.87
+      "latency_ms": 3.75
     },
     {
       "config_id": "D_C2_P2",
@@ -662,7 +662,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 3.87
+      "latency_ms": 3.75
     },
     {
       "config_id": "D_C3_P2",
@@ -684,7 +684,7 @@
       "chroma_loss_mean": 0.0169,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 3.87
+      "latency_ms": 3.75
     },
     {
       "config_id": "E.1_C1_P2",
@@ -706,7 +706,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 18.56
+      "latency_ms": 16.41
     },
     {
       "config_id": "E.1_C2_P2",
@@ -728,7 +728,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 18.56
+      "latency_ms": 16.41
     },
     {
       "config_id": "E.1_C3_P2",
@@ -750,7 +750,7 @@
       "chroma_loss_mean": 0.0172,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 18.56
+      "latency_ms": 16.41
     },
     {
       "config_id": "E.2_C1_P2",
@@ -772,7 +772,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 77.6
+      "latency_ms": 82.51
     },
     {
       "config_id": "E.2_C2_P2",
@@ -794,7 +794,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 77.6
+      "latency_ms": 82.51
     },
     {
       "config_id": "E.2_C3_P2",
@@ -816,7 +816,7 @@
       "chroma_loss_mean": 0.0172,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 77.6
+      "latency_ms": 82.51
     },
     {
       "config_id": "A_C1_P3",
@@ -838,7 +838,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.28
+      "latency_ms": 0.6
     },
     {
       "config_id": "A_C2_P3",
@@ -860,7 +860,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.28
+      "latency_ms": 0.6
     },
     {
       "config_id": "A_C3_P3",
@@ -882,7 +882,7 @@
       "chroma_loss_mean": 0.0197,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.28
+      "latency_ms": 0.6
     },
     {
       "config_id": "B_C1_P3",
@@ -904,7 +904,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.94
+      "latency_ms": 13.55
     },
     {
       "config_id": "B_C2_P3",
@@ -926,7 +926,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.94
+      "latency_ms": 13.55
     },
     {
       "config_id": "B_C3_P3",
@@ -948,7 +948,7 @@
       "chroma_loss_mean": 0.0198,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.94
+      "latency_ms": 13.55
     },
     {
       "config_id": "C_C1_P3",
@@ -970,7 +970,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 309,
       "neg_depth": -0.126723,
-      "latency_ms": 15.56
+      "latency_ms": 16.39
     },
     {
       "config_id": "C_C2_P3",
@@ -992,7 +992,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 309,
       "neg_depth": -0.126723,
-      "latency_ms": 15.56
+      "latency_ms": 16.39
     },
     {
       "config_id": "C_C3_P3",
@@ -1014,7 +1014,7 @@
       "chroma_loss_mean": 0.0196,
       "N_neg": 309,
       "neg_depth": -0.126723,
-      "latency_ms": 15.56
+      "latency_ms": 16.39
     },
     {
       "config_id": "D_C1_P3",
@@ -1036,7 +1036,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 45816,
       "neg_depth": -0.393732,
-      "latency_ms": 3.83
+      "latency_ms": 3.04
     },
     {
       "config_id": "D_C2_P3",
@@ -1058,7 +1058,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 45816,
       "neg_depth": -0.393732,
-      "latency_ms": 3.83
+      "latency_ms": 3.04
     },
     {
       "config_id": "D_C3_P3",
@@ -1080,7 +1080,7 @@
       "chroma_loss_mean": 0.016,
       "N_neg": 45816,
       "neg_depth": -0.393732,
-      "latency_ms": 3.83
+      "latency_ms": 3.04
     },
     {
       "config_id": "E.1_C1_P3",
@@ -1102,7 +1102,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.76
+      "latency_ms": 18.55
     },
     {
       "config_id": "E.1_C2_P3",
@@ -1124,7 +1124,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.76
+      "latency_ms": 18.55
     },
     {
       "config_id": "E.1_C3_P3",
@@ -1146,7 +1146,7 @@
       "chroma_loss_mean": 0.0192,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 17.76
+      "latency_ms": 18.55
     },
     {
       "config_id": "E.2_C1_P3",
@@ -1168,7 +1168,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 89.71
+      "latency_ms": 87.98
     },
     {
       "config_id": "E.2_C2_P3",
@@ -1190,7 +1190,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 89.71
+      "latency_ms": 87.98
     },
     {
       "config_id": "E.2_C3_P3",
@@ -1212,7 +1212,7 @@
       "chroma_loss_mean": 0.019,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 89.71
+      "latency_ms": 87.98
     },
     {
       "config_id": "A_C1_P4",
@@ -1234,7 +1234,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.25
+      "latency_ms": 0.5
     },
     {
       "config_id": "A_C2_P4",
@@ -1256,7 +1256,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.25
+      "latency_ms": 0.5
     },
     {
       "config_id": "A_C3_P4",
@@ -1278,7 +1278,7 @@
       "chroma_loss_mean": 0.0107,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 0.25
+      "latency_ms": 0.5
     },
     {
       "config_id": "B_C1_P4",
@@ -1300,7 +1300,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.83
+      "latency_ms": 15.77
     },
     {
       "config_id": "B_C2_P4",
@@ -1322,7 +1322,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.83
+      "latency_ms": 15.77
     },
     {
       "config_id": "B_C3_P4",
@@ -1344,7 +1344,7 @@
       "chroma_loss_mean": 0.0086,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 14.83
+      "latency_ms": 15.77
     },
     {
       "config_id": "C_C1_P4",
@@ -1366,7 +1366,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 286,
       "neg_depth": -0.096072,
-      "latency_ms": 15.87
+      "latency_ms": 15.46
     },
     {
       "config_id": "C_C2_P4",
@@ -1388,7 +1388,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 286,
       "neg_depth": -0.096072,
-      "latency_ms": 15.87
+      "latency_ms": 15.46
     },
     {
       "config_id": "C_C3_P4",
@@ -1410,7 +1410,7 @@
       "chroma_loss_mean": 0.0106,
       "N_neg": 286,
       "neg_depth": -0.096072,
-      "latency_ms": 15.87
+      "latency_ms": 15.46
     },
     {
       "config_id": "D_C1_P4",
@@ -1432,7 +1432,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 6054,
       "neg_depth": -0.207034,
-      "latency_ms": 4.81
+      "latency_ms": 4.41
     },
     {
       "config_id": "D_C2_P4",
@@ -1454,7 +1454,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 6054,
       "neg_depth": -0.207034,
-      "latency_ms": 4.81
+      "latency_ms": 4.41
     },
     {
       "config_id": "D_C3_P4",
@@ -1476,7 +1476,7 @@
       "chroma_loss_mean": 0.0084,
       "N_neg": 6054,
       "neg_depth": -0.207034,
-      "latency_ms": 4.81
+      "latency_ms": 4.41
     },
     {
       "config_id": "E.1_C1_P4",
@@ -1498,7 +1498,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 19.74
+      "latency_ms": 17.35
     },
     {
       "config_id": "E.1_C2_P4",
@@ -1520,7 +1520,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 19.74
+      "latency_ms": 17.35
     },
     {
       "config_id": "E.1_C3_P4",
@@ -1542,7 +1542,7 @@
       "chroma_loss_mean": 0.0098,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 19.74
+      "latency_ms": 17.35
     },
     {
       "config_id": "E.2_C1_P4",
@@ -1564,7 +1564,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 85.38
+      "latency_ms": 84.67
     },
     {
       "config_id": "E.2_C2_P4",
@@ -1586,7 +1586,7 @@
       "chroma_loss_mean": 0.0,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 85.38
+      "latency_ms": 84.67
     },
     {
       "config_id": "E.2_C3_P4",
@@ -1608,7 +1608,7 @@
       "chroma_loss_mean": 0.0088,
       "N_neg": 0,
       "neg_depth": 0.0,
-      "latency_ms": 85.38
+      "latency_ms": 84.67
     }
   ],
   "highlight_ablation": [
@@ -1651,34 +1651,162 @@
   ],
   "latency": {
     "A": {
-      "p50_ms": 0.15,
-      "p95_ms": 0.18,
-      "rss_mb": 760.3
+      "p50_ms": 0.2,
+      "p95_ms": 0.21,
+      "working_set_peak_mb": 4.5,
+      "process_rss_mb": 745.9
     },
     "B": {
-      "p50_ms": 14.46,
-      "p95_ms": 15.81,
-      "rss_mb": 760.5
+      "p50_ms": 14.03,
+      "p95_ms": 15.44,
+      "working_set_peak_mb": 33.75,
+      "process_rss_mb": 745.9
     },
     "C": {
-      "p50_ms": 14.56,
-      "p95_ms": 15.93,
-      "rss_mb": 760.5
+      "p50_ms": 14.65,
+      "p95_ms": 16.55,
+      "working_set_peak_mb": 29.25,
+      "process_rss_mb": 745.9
     },
     "D": {
-      "p50_ms": 3.65,
-      "p95_ms": 4.35,
-      "rss_mb": 760.6
+      "p50_ms": 3.13,
+      "p95_ms": 3.82,
+      "working_set_peak_mb": 20.07,
+      "process_rss_mb": 746.0
     },
     "E.1": {
-      "p50_ms": 16.38,
-      "p95_ms": 17.35,
-      "rss_mb": 760.6
+      "p50_ms": 16.25,
+      "p95_ms": 18.5,
+      "working_set_peak_mb": 38.25,
+      "process_rss_mb": 746.0
     },
     "E.2": {
-      "p50_ms": 76.01,
-      "p95_ms": 79.25,
-      "rss_mb": 771.9
+      "p50_ms": 77.37,
+      "p95_ms": 79.63,
+      "working_set_peak_mb": 148.36,
+      "process_rss_mb": 746.1
     }
-  }
+  },
+  "multi_image_generalization": [
+    {
+      "photo": "real_sneaker",
+      "profile": "P1",
+      "DCI_HDR_linear": 0.99994,
+      "DCI_SDR_mapped": 0.99847,
+      "GOE_deg": 4.79,
+      "GPI_pct": 0.02,
+      "N_hard_clip": 0,
+      "V_excursion": 4.1
+    },
+    {
+      "photo": "real_sneaker",
+      "profile": "P2",
+      "DCI_HDR_linear": 0.99875,
+      "DCI_SDR_mapped": 0.97842,
+      "GOE_deg": 18.91,
+      "GPI_pct": 1.68,
+      "N_hard_clip": 0,
+      "V_excursion": 33.61
+    },
+    {
+      "photo": "real_sneaker",
+      "profile": "P3",
+      "DCI_HDR_linear": 0.99743,
+      "DCI_SDR_mapped": 0.99358,
+      "GOE_deg": 5.35,
+      "GPI_pct": 0.91,
+      "N_hard_clip": 0,
+      "V_excursion": 16.2
+    },
+    {
+      "photo": "real_sneaker",
+      "profile": "P4",
+      "DCI_HDR_linear": 0.99923,
+      "DCI_SDR_mapped": 0.99896,
+      "GOE_deg": 20.16,
+      "GPI_pct": 5.28,
+      "N_hard_clip": 0,
+      "V_excursion": 0.36
+    },
+    {
+      "photo": "real_landscape",
+      "profile": "P1",
+      "DCI_HDR_linear": 0.99999,
+      "DCI_SDR_mapped": 0.99985,
+      "GOE_deg": 0.44,
+      "GPI_pct": 0.0,
+      "N_hard_clip": 0,
+      "V_excursion": 25.11
+    },
+    {
+      "photo": "real_landscape",
+      "profile": "P2",
+      "DCI_HDR_linear": 0.99989,
+      "DCI_SDR_mapped": 0.99968,
+      "GOE_deg": 1.22,
+      "GPI_pct": 0.0,
+      "N_hard_clip": 0,
+      "V_excursion": 71.91
+    },
+    {
+      "photo": "real_landscape",
+      "profile": "P3",
+      "DCI_HDR_linear": 0.99993,
+      "DCI_SDR_mapped": 0.99956,
+      "GOE_deg": 0.65,
+      "GPI_pct": 0.0,
+      "N_hard_clip": 0,
+      "V_excursion": 36.45
+    },
+    {
+      "photo": "real_landscape",
+      "profile": "P4",
+      "DCI_HDR_linear": 0.99982,
+      "DCI_SDR_mapped": 0.99977,
+      "GOE_deg": 1.34,
+      "GPI_pct": 0.0,
+      "N_hard_clip": 0,
+      "V_excursion": 15.73
+    },
+    {
+      "photo": "real_statue",
+      "profile": "P1",
+      "DCI_HDR_linear": 0.99945,
+      "DCI_SDR_mapped": 0.88593,
+      "GOE_deg": 6.12,
+      "GPI_pct": 0.17,
+      "N_hard_clip": 0,
+      "V_excursion": 8.23
+    },
+    {
+      "photo": "real_statue",
+      "profile": "P2",
+      "DCI_HDR_linear": 0.99486,
+      "DCI_SDR_mapped": 0.81356,
+      "GOE_deg": 24.6,
+      "GPI_pct": 1.27,
+      "N_hard_clip": 0,
+      "V_excursion": 16.98
+    },
+    {
+      "photo": "real_statue",
+      "profile": "P3",
+      "DCI_HDR_linear": 0.99243,
+      "DCI_SDR_mapped": 0.89987,
+      "GOE_deg": 7.65,
+      "GPI_pct": 0.77,
+      "N_hard_clip": 0,
+      "V_excursion": 8.63
+    },
+    {
+      "photo": "real_statue",
+      "profile": "P4",
+      "DCI_HDR_linear": 0.99776,
+      "DCI_SDR_mapped": 0.97113,
+      "GOE_deg": 8.0,
+      "GPI_pct": 1.46,
+      "N_hard_clip": 0,
+      "V_excursion": 1.81
+    }
+  ]
 }
