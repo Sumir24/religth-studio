@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "name": "Untitled Studio Scene",
+    "created_at": 1794245072.4889631,
+    "version": "3.0.0",
+    "author": "Relight Artist"
+  },
+  "camera": {
+    "pos": [
+      0.0,
+      1.2,
+      2.5
+    ],
+    "target": [
+      0.0,
+      0.35,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "fov_deg": 45.0,
+    "width": 576,
+    "height": 1024,
+    "focal_length_mm": 50.0
+  },
+  "subject": {
+    "proxy_type": "SUPERQUADRIC",
+    "position": [
+      0.0,
+      0.4,
+      0.0
+    ],
+    "rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "dimensions": [
+      0.3,
+      0.4,
+      0.3
+    ],
+    "sq_exponents": [
+      0.8,
+      0.8
+    ],
+    "mesh_path": null,
+    "visible": true
+  },
+  "receiver": {
+    "receiver_type": "CYCLORAMA",
+    "ground_y": 0.0,
+    "cove_center_yz": [
+      0.4,
+      -0.8
+    ],
+    "cove_radius": 0.4,
+    "wall_z": -1.2,
+    "visible": true
+  },
+  "lights": [
+    {
+      "id": "key_light_1",
+      "name": "Key Softbox",
+      "position": [
+        -1.5,
+        2.0,
+        1.0
+      ],
+      "rotation_deg": [
+        -40.0,
+        -30.0,
+        0.0
+      ],
+      "width": 0.8,
+      "height": 0.8,
+      "intensity": 1.8,
+      "color_rgb": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "temperature_kelvin": 3200.0,
+      "energy_convention": "FIXED_RADIANCE",
+      "enabled": true
+    }
+  ],
+  "render_settings": {
+    "quality": "PREVIEW",
+    "preview_samples": 4,
+    "final_samples": 32,
+    "enable_cast_shadows": true,
+    "enable_contact_grounding": true,
+    "enable_hbao": true,
+    "ambient_fill": 0.15,
+    "exposure": 1.0
+  }
+}

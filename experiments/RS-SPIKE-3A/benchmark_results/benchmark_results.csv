@@ -1,0 +1,7 @@
+case_id,category,proxy_type,receiver_type,SDE_px,gate_SDE,IoU,gate_IoU,SLR_pct,gate_SLR,CGS,gate_CGS,DCI,gate_DCI,latency_preview_ms,latency_final_ms,gate_latency,diagnostic_sheet
+S3A_01_perfume_box_plane,cat1_perfume_box,OBB,PLANE,92.18,FAIL,0.3302,FAIL,0.0,PASS,0.0,PASS,0.9968,PASS,142.63,640.04,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_01_perfume_box_plane_diagnostic_board.png
+S3A_02_perfume_box_cyclorama,cat1_perfume_box,OBB,CYCLORAMA,4.34,FAIL,0.922,PASS,0.0,PASS,0.0,PASS,0.9671,FAIL,138.19,655.31,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_02_perfume_box_cyclorama_diagnostic_board.png
+S3A_03_cosmetic_bottle_cyclorama,cat2_cosmetic_bottle,SUPERQUADRIC,CYCLORAMA,6.3,FAIL,0.8608,FAIL,0.0,PASS,0.0,PASS,0.9884,PASS,154.11,744.99,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_03_cosmetic_bottle_cyclorama_diagnostic_board.png
+S3A_04_sneaker_mesh_plane,cat3_sneaker,MESH,PLANE,14.79,FAIL,0.616,FAIL,0.0,PASS,0.0,PASS,0.9927,PASS,1085.73,8123.26,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_04_sneaker_mesh_plane_diagnostic_board.png
+S3A_05_metallic_watch_plane,cat4_metallic_watch,OBB,PLANE,141.89,FAIL,0.0506,FAIL,0.0,PASS,0.0,PASS,0.9967,PASS,141.45,651.42,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_05_metallic_watch_plane_diagnostic_board.png
+S3A_06_organic_sculpture_cyclorama,cat5_organic_object,SUPERQUADRIC,CYCLORAMA,22.01,FAIL,0.6052,FAIL,0.0,PASS,0.0,PASS,0.9891,PASS,137.47,617.32,FAIL,experiments/RS-SPIKE-3A/diagnostic_outputs/S3A_06_organic_sculpture_cyclorama_diagnostic_board.png
