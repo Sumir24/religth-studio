@@ -188,6 +188,126 @@ int metal2_dispatch_vector_add(
     }
 }
 
+static id<MTLComputePipelineState> g_oklab_pso = nil;
+
+int metal2_dispatch_oklab_gamut_map(
+    const float* in_rgb,
+    float* out_rgb,
+    uint32_t count,
+    float* out_gpu_time_ms
+) {
+    if (!in_rgb || !out_rgb || count == 0) {
+        return METAL_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (g_device == nil) {
+        int err = metal2_init_device();
+        if (err != METAL_SUCCESS) return err;
+    }
+
+    @autoreleasepool {
+        if (!g_oklab_pso) {
+            NSArray* candidate_paths = @[
+                @"metal2/shaders/reconstruction.metal",
+                @"shaders/reconstruction.metal",
+                @"../shaders/reconstruction.metal",
+                @"/Users/sumirdayal/religth studio/metal2/shaders/reconstruction.metal"
+            ];
+            NSString* shader_src = nil;
+            for (NSString* p in candidate_paths) {
+                if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+                    shader_src = [NSString stringWithContentsOfFile:p encoding:NSUTF8StringEncoding error:nil];
+                    if (shader_src) break;
+                }
+            }
+
+            if (!shader_src) {
+                fprintf(stderr, "[METAL2 ERROR] reconstruction.metal not found.\n");
+                return METAL_ERROR_COMPILATION_FAILED;
+            }
+
+            MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+            if (@available(macOS 13.0, *)) {
+                options.languageVersion = MTLLanguageVersion3_0;
+            }
+
+            NSError* err = nil;
+            id<MTLLibrary> lib = [g_device newLibraryWithSource:shader_src options:options error:&err];
+            if (!lib || err) {
+                fprintf(stderr, "[METAL2 ERROR] Failed to compile reconstruction.metal: %s\n",
+                        [[err localizedDescription] UTF8String]);
+                return METAL_ERROR_COMPILATION_FAILED;
+            }
+
+            id<MTLFunction> fn = [lib newFunctionWithName:@"oklab_gamut_mapping_kernel"];
+            if (!fn) {
+                fprintf(stderr, "[METAL2 ERROR] Kernel oklab_gamut_mapping_kernel not found.\n");
+                return METAL_ERROR_PIPELINE_CREATION;
+            }
+
+            g_oklab_pso = [g_device newComputePipelineStateWithFunction:fn error:&err];
+            if (!g_oklab_pso || err) {
+                fprintf(stderr, "[METAL2 ERROR] Pipeline creation failed: %s\n",
+                        [[err localizedDescription] UTF8String]);
+                return METAL_ERROR_PIPELINE_CREATION;
+            }
+        }
+
+        size_t byte_len = (size_t)count * 3 * sizeof(float);
+        id<MTLBuffer> buf_in = [g_device newBufferWithBytes:in_rgb length:byte_len options:MTLResourceStorageModeShared];
+        id<MTLBuffer> buf_out = [g_device newBufferWithLength:byte_len options:MTLResourceStorageModeShared];
+
+        if (!buf_in || !buf_out) {
+            return METAL_ERROR_BUFFER_ALLOCATION;
+        }
+
+        id<MTLCommandBuffer> cmd_buf = [g_command_queue commandBuffer];
+        id<MTLComputeCommandEncoder> encoder = [cmd_buf computeCommandEncoder];
+
+        [encoder setComputePipelineState:g_oklab_pso];
+        [encoder setBuffer:buf_in offset:0 atIndex:0];
+        [encoder setBuffer:buf_out offset:0 atIndex:1];
+        [encoder setBytes:&count length:sizeof(uint32_t) atIndex:2];
+
+        NSUInteger threadGroupSize = g_oklab_pso.maxTotalThreadsPerThreadgroup;
+        if (threadGroupSize > 256) threadGroupSize = 256;
+        MTLSize threadsPerGroup = MTLSizeMake(threadGroupSize, 1, 1);
+        MTLSize numGroups = MTLSizeMake((count + threadGroupSize - 1) / threadGroupSize, 1, 1);
+
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+        [encoder endEncoding];
+
+        auto t_start = std::chrono::high_resolution_clock::now();
+        [cmd_buf commit];
+        [cmd_buf waitUntilCompleted];
+        auto t_end = std::chrono::high_resolution_clock::now();
+
+        if (cmd_buf.status == MTLCommandBufferStatusError) {
+            fprintf(stderr, "[METAL2 ERROR] Command buffer failed: %s\n",
+                    [[cmd_buf.error localizedDescription] UTF8String]);
+            return METAL_ERROR_EXECUTION_FAILED;
+        }
+
+        memcpy(out_rgb, [buf_out contents], byte_len);
+
+        if (out_gpu_time_ms) {
+            if (@available(macOS 10.15, *)) {
+                CFTimeInterval gpu_time = cmd_buf.GPUEndTime - cmd_buf.GPUStartTime;
+                if (gpu_time > 0.0) {
+                    *out_gpu_time_ms = (float)(gpu_time * 1000.0);
+                } else {
+                    double elapsed = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+                    *out_gpu_time_ms = (float)elapsed;
+                }
+            } else {
+                double elapsed = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+                *out_gpu_time_ms = (float)elapsed;
+            }
+        }
+        return METAL_SUCCESS;
+    }
+}
+
 int metal2_render_frame(
     const CCameraParams* cam,
     const CProxyParams* proxy,
@@ -363,6 +483,7 @@ void metal2_shutdown() {
     @autoreleasepool {
         g_render_pso = nil;
         g_vec_add_pso = nil;
+        g_oklab_pso = nil;
         g_library = nil;
         g_command_queue = nil;
         g_device = nil;

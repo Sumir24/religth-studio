@@ -47,6 +47,14 @@ int metal2_dispatch_vector_add(
     float* out_gpu_time_ms
 );
 
+// C3 Oklab Constant-Hue Gamut Mapping Compute Dispatch
+int metal2_dispatch_oklab_gamut_map(
+    const float* in_rgb,
+    float* out_rgb,
+    uint32_t count,
+    float* out_gpu_time_ms
+);
+
 // Full Scene-Driven 3D Rendering Pipeline (Phases 2-6)
 typedef struct {
     float position[3];

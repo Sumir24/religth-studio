@@ -1,0 +1,122 @@
+{
+  "M2_01": {
+    "soft_iou": 0.8959000110626221,
+    "continuous_sde_px": 1.7,
+    "contour_displacement_px": 0.55,
+    "shadow_field_mae": 0.004612,
+    "shadow_field_rmse": 0.035664,
+    "shadow_field_max_err": 0.5,
+    "penumbra": {
+      "penumbra_area_cand": 2590,
+      "penumbra_area_gt": 2577,
+      "penumbra_area_ratio": 1.005,
+      "penumbra_mae": 0.1303
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000429,
+    "gpu_time_ms": 0.13
+  },
+  "M2_02": {
+    "soft_iou": 0.8937000036239624,
+    "continuous_sde_px": 1.73,
+    "contour_displacement_px": 0.72,
+    "shadow_field_mae": 0.004885,
+    "shadow_field_rmse": 0.039965,
+    "shadow_field_max_err": 1.0,
+    "penumbra": {
+      "penumbra_area_cand": 2948,
+      "penumbra_area_gt": 2988,
+      "penumbra_area_ratio": 0.9866,
+      "penumbra_mae": 0.1261
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000627,
+    "gpu_time_ms": 0.17
+  },
+  "M2_03": {
+    "soft_iou": 0.8036999702453613,
+    "continuous_sde_px": 2.87,
+    "contour_displacement_px": 2.04,
+    "shadow_field_mae": 0.008072,
+    "shadow_field_rmse": 0.060484,
+    "shadow_field_max_err": 1.0,
+    "penumbra": {
+      "penumbra_area_cand": 3160,
+      "penumbra_area_gt": 2735,
+      "penumbra_area_ratio": 1.1554,
+      "penumbra_mae": 0.1834
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000617,
+    "gpu_time_ms": 0.3
+  },
+  "M2_04": {
+    "soft_iou": 0.8601999878883362,
+    "continuous_sde_px": 2.79,
+    "contour_displacement_px": 0.63,
+    "shadow_field_mae": 0.002911,
+    "shadow_field_rmse": 0.034882,
+    "shadow_field_max_err": 0.943686,
+    "penumbra": {
+      "penumbra_area_cand": 805,
+      "penumbra_area_gt": 783,
+      "penumbra_area_ratio": 1.0281,
+      "penumbra_mae": 0.2242
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000414,
+    "gpu_time_ms": 1.5
+  },
+  "M2_05": {
+    "soft_iou": 0.9492999911308289,
+    "continuous_sde_px": 0.7,
+    "contour_displacement_px": 0.16,
+    "shadow_field_mae": 0.000323,
+    "shadow_field_rmse": 0.010852,
+    "shadow_field_max_err": 0.5,
+    "penumbra": {
+      "penumbra_area_cand": 441,
+      "penumbra_area_gt": 435,
+      "penumbra_area_ratio": 1.0138,
+      "penumbra_mae": 0.0624
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000414,
+    "gpu_time_ms": 0.13
+  },
+  "M2_06": {
+    "soft_iou": 0.7458000183105469,
+    "continuous_sde_px": 6.25,
+    "contour_displacement_px": 3.35,
+    "shadow_field_mae": 0.008923,
+    "shadow_field_rmse": 0.075464,
+    "shadow_field_max_err": 0.95,
+    "penumbra": {
+      "penumbra_area_cand": 1514,
+      "penumbra_area_gt": 1404,
+      "penumbra_area_ratio": 1.0783,
+      "penumbra_mae": 0.2416
+    },
+    "contact": {
+      "contact_min_vis": 1.0,
+      "gate_contact": "N/A"
+    },
+    "irradiance_mae": 0.000616,
+    "gpu_time_ms": 0.25
+  }
+}

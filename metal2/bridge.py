@@ -114,6 +114,11 @@ class Metal2Bridge:
         ]
         self.lib.metal2_dispatch_vector_add.restype = c_int
 
+        self.lib.metal2_dispatch_oklab_gamut_map.argtypes = [
+            POINTER(c_float), POINTER(c_float), c_uint32, POINTER(c_float)
+        ]
+        self.lib.metal2_dispatch_oklab_gamut_map.restype = c_int
+
         self.lib.metal2_render_frame.argtypes = [
             POINTER(CCameraParams),
             POINTER(CProxyParams),
@@ -195,6 +200,32 @@ class Metal2Bridge:
             raise RuntimeError(f"metal2_dispatch_vector_add failed (code: {status})")
 
         return out, float(gpu_time.value)
+
+    def dispatch_oklab_gamut_map(
+        self,
+        in_rgb: np.ndarray
+    ) -> Tuple[np.ndarray, float]:
+        """
+        Dispatches C3 Oklab constant-hue chroma bisection kernel on Metal GPU.
+        Input: (N, 3) or (H, W, 3) linear RGB array.
+        Returns: (out_rgb, gpu_time_ms)
+        """
+        orig_shape = in_rgb.shape
+        in_flat = np.ascontiguousarray(in_rgb.reshape(-1, 3), dtype=np.float32)
+        count = len(in_flat)
+        out_flat = np.empty_like(in_flat)
+
+        in_ptr = in_flat.ctypes.data_as(POINTER(c_float))
+        out_ptr = out_flat.ctypes.data_as(POINTER(c_float))
+        gpu_time = c_float(0.0)
+
+        status = self.lib.metal2_dispatch_oklab_gamut_map(
+            in_ptr, out_ptr, c_uint32(count), ctypes.byref(gpu_time)
+        )
+        if status != 0:
+            raise RuntimeError(f"metal2_dispatch_oklab_gamut_map failed (code: {status})")
+
+        return out_flat.reshape(orig_shape), float(gpu_time.value)
 
     def render_frame(
         self,

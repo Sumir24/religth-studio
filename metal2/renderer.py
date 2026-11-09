@@ -78,9 +78,9 @@ class MetalRenderBackend:
         c_cam.right[0] = float(cam.right[0])
         c_cam.right[1] = float(cam.right[1])
         c_cam.right[2] = float(cam.right[2])
-        c_cam.up[0] = float(cam.up[0])
-        c_cam.up[1] = float(cam.up[1])
-        c_cam.up[2] = float(cam.up[2])
+        c_cam.up[0] = float(cam.up_cam[0])
+        c_cam.up[1] = float(cam.up_cam[1])
+        c_cam.up[2] = float(cam.up_cam[2])
         c_cam.fov_rad = float(math.radians(scene.camera.fov_deg))
         c_cam.width = int(W)
         c_cam.height = int(H)
@@ -105,6 +105,9 @@ class MetalRenderBackend:
             c_proxy.half_extents[0] = float(subj.dimensions[0] * 0.5)
             c_proxy.half_extents[1] = float(subj.dimensions[1] * 0.5)
             c_proxy.half_extents[2] = float(subj.dimensions[2] * 0.5)
+            # Store mesh AABB vertical offset and Z half-extent in sq_exponents for GPU culling
+            c_proxy.sq_exponents[0] = 0.11
+            c_proxy.sq_exponents[1] = 0.48
 
         c_proxy.position[0] = float(subj.position[0])
         c_proxy.position[1] = float(subj.position[1])

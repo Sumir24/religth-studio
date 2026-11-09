@@ -57,3 +57,4 @@ def test_metal_custom_shader_compilation():
     """
     # Should compile without error
     bridge.compile_shaders_from_source(custom_msl)
+

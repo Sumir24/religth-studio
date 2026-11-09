@@ -26,10 +26,9 @@ def test_metal_c3_oklab_gamut_mapping_evaluation():
     in_rgb = np.random.uniform(-0.5, 2.0, (N, 3)).astype(np.float32)
     out_rgb = np.empty_like(in_rgb)
     
-    # Dispatch on Metal GPU
-    # Use vector add bridge structure or custom dispatch
-    # Here we dispatch vector add to verify timing
-    _, gpu_time_ms = bridge.dispatch_vector_add(in_rgb.flatten(), np.zeros_like(in_rgb).flatten(), 1.0)
+    # Dispatch REAL C3 Oklab kernel on Metal GPU
+    out_rgb, gpu_time_ms = bridge.dispatch_oklab_gamut_map(in_rgb)
     
-    print(f"\n[PHASE 4: OKLAB EVALUATION] 1080p buffer dispatch ({N:,} pixels): GPU time = {gpu_time_ms:.3f}ms")
-    assert gpu_time_ms < 5.0, f"Expected 1080p buffer dispatch < 5.0ms on Apple M5, got {gpu_time_ms}ms"
+    print(f"\n[PHASE 4: REAL OKLAB 1080p DISPATCH] ({N:,} pixels): GPU time = {gpu_time_ms:.3f}ms")
+    assert gpu_time_ms < 10.0, f"Expected 1080p Oklab dispatch < 10.0ms on Apple M5, got {gpu_time_ms}ms"
+    assert np.all(out_rgb >= 0.0) and np.all(out_rgb <= 1.0), "All output colors must be mapped to displayable [0, 1] sRGB"

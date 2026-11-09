@@ -201,8 +201,34 @@ inline bool intersect_superquadric(
 inline bool intersect_mesh(
     float3 ray_o, float3 ray_d,
     constant const TriangleMesh* triangles, uint n_triangles,
+    constant const ProxyParams& proxy,
     thread float& out_t, thread float3& out_normal
 ) {
+    // Fast-reject bounding box culling
+    float3 box_center = float3(proxy.position) + float3(0.0f, proxy.sq_exponents.x, 0.0f);
+    float3 box_half = float3(proxy.half_extents.x + 0.02f, proxy.sq_exponents.x + 0.02f, proxy.sq_exponents.y + 0.02f);
+    float3 oc = ray_o - box_center;
+    float3 ro_local = mat3_transpose_mul_vec(proxy.rot_matrix, oc);
+    float3 rd_local = mat3_transpose_mul_vec(proxy.rot_matrix, ray_d);
+
+    float3 inv_d = float3(
+        fabs(rd_local.x) > 1e-6 ? 1.0f / rd_local.x : (rd_local.x >= 0 ? 1e6f : -1e6f),
+        fabs(rd_local.y) > 1e-6 ? 1.0f / rd_local.y : (rd_local.y >= 0 ? 1e6f : -1e6f),
+        fabs(rd_local.z) > 1e-6 ? 1.0f / rd_local.z : (rd_local.z >= 0 ? 1e6f : -1e6f)
+    );
+
+    float3 t0 = (-box_half - ro_local) * inv_d;
+    float3 t1 = (box_half - ro_local) * inv_d;
+    float3 tmin_xyz = min(t0, t1);
+    float3 tmax_xyz = max(t0, t1);
+
+    float t_near = max(max(tmin_xyz.x, tmin_xyz.y), tmin_xyz.z);
+    float t_far = min(min(tmax_xyz.x, tmax_xyz.y), tmax_xyz.z);
+
+    if (t_near > t_far || t_far <= 1e-4f) {
+        return false;
+    }
+
     float best_t = 1e9f;
     float3 best_norm = float3(0.0f);
     bool hit_any = false;
@@ -451,11 +477,11 @@ kernel void render_hybrid_studio_kernel(
 
             // 1. Occlusion by subject proxy
             if (proxy.proxy_type == 0) {
-                is_blocked = intersect_obb(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit < dist - 1e-3f);
+                is_blocked = intersect_obb(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
             } else if (proxy.proxy_type == 1) {
-                is_blocked = intersect_superquadric(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit < dist - 1e-3f);
+                is_blocked = intersect_superquadric(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
             } else if (proxy.proxy_type == 2 && mesh_triangles) {
-                is_blocked = intersect_mesh(p_bias, L_dir, mesh_triangles, proxy.num_triangles, t_hit, dummy_n) && (t_hit < dist - 1e-3f);
+                is_blocked = intersect_mesh(p_bias, L_dir, mesh_triangles, proxy.num_triangles, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
             }
 
             // 2. Occlusion by receiver geometry (cyclorama cove self-shadowing)
