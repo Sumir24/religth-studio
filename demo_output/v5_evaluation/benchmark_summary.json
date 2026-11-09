@@ -1,0 +1,132 @@
+[
+  {
+    "name": "nike_sneaker",
+    "resolution": "576x1024",
+    "preset": "warm_key_cool_rim",
+    "material": "satin",
+    "L_orig_estimated": [
+      0.859248161315918,
+      -0.11870395392179489,
+      0.497594952583313
+    ],
+    "v5": {
+      "time_ms": 1777.3,
+      "detail_lock_err": 0.0993,
+      "detail_ratio_med": 0.9775,
+      "banding_gain": 0.017,
+      "chroma_shift_p95": 18.86,
+      "finite": true
+    },
+    "v4": {
+      "time_ms": 1684.8,
+      "detail_lock_err": 0.0801,
+      "detail_ratio_med": 0.9666,
+      "banding_gain": 0.0065,
+      "chroma_shift_p95": 16.07
+    }
+  },
+  {
+    "name": "classical_statue",
+    "resolution": "576x1024",
+    "preset": "rembrandt",
+    "material": "skin_marble",
+    "L_orig_estimated": [
+      -0.9319018721580505,
+      -0.032183725386857986,
+      0.3612784147262573
+    ],
+    "v5": {
+      "time_ms": 1622.0,
+      "detail_lock_err": 0.0424,
+      "detail_ratio_med": 0.9946,
+      "banding_gain": -0.7876,
+      "chroma_shift_p95": 9.96,
+      "finite": true
+    },
+    "v4": {
+      "time_ms": 1745.1,
+      "detail_lock_err": 0.0505,
+      "detail_ratio_med": 0.993,
+      "banding_gain": -0.7842,
+      "chroma_shift_p95": 9.33
+    }
+  },
+  {
+    "name": "alpine_landscape",
+    "resolution": "576x1024",
+    "preset": "golden_hour_back",
+    "material": "matte",
+    "L_orig_estimated": [
+      0.002043947344645858,
+      -0.9990537762641907,
+      0.04344172775745392
+    ],
+    "v5": {
+      "time_ms": 1443.0,
+      "detail_lock_err": 0.018,
+      "detail_ratio_med": 1.0293,
+      "banding_gain": -0.0239,
+      "chroma_shift_p95": 23.55,
+      "finite": true
+    },
+    "v4": {
+      "time_ms": 1341.6,
+      "detail_lock_err": 0.0185,
+      "detail_ratio_med": 1.0291,
+      "banding_gain": -0.0105,
+      "chroma_shift_p95": 21.4
+    }
+  },
+  {
+    "name": "sailboat_sea",
+    "resolution": "680x1024",
+    "preset": "warm_key_cool_rim",
+    "material": "glossy",
+    "L_orig_estimated": [
+      0.34535646438598633,
+      -0.9339427947998047,
+      0.09208350628614426
+    ],
+    "v5": {
+      "time_ms": 4071.3,
+      "detail_lock_err": 0.2093,
+      "detail_ratio_med": 0.8579,
+      "banding_gain": 0.0706,
+      "chroma_shift_p95": 21.35,
+      "finite": true
+    },
+    "v4": {
+      "time_ms": 3883.4,
+      "detail_lock_err": 0.1048,
+      "detail_ratio_med": 0.7914,
+      "banding_gain": 0.0724,
+      "chroma_shift_p95": 21.13
+    }
+  },
+  {
+    "name": "landscape_sun",
+    "resolution": "768x512",
+    "preset": "warm_key_cool_rim",
+    "material": "matte",
+    "L_orig_estimated": [
+      0.5187656283378601,
+      -0.22908204793930054,
+      0.8236516714096069
+    ],
+    "v5": {
+      "time_ms": 674.9,
+      "detail_lock_err": 0.1136,
+      "detail_ratio_med": 1.0218,
+      "banding_gain": -0.2556,
+      "chroma_shift_p95": 25.31,
+      "finite": true
+    },
+    "v4": {
+      "time_ms": 611.8,
+      "detail_lock_err": 0.0739,
+      "detail_ratio_med": 1.0107,
+      "banding_gain": -0.3765,
+      "chroma_shift_p95": 22.89
+    }
+  }
+]

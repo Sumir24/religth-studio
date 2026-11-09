@@ -1,0 +1,55 @@
+{
+  "metrics": {
+    "detail_ratio_median": 0.9730463624000549,
+    "detail_lock_error_log": 0.09784998744726181,
+    "banding_orig": 0.49987542629241943,
+    "banding_relit": 0.5145230293273926,
+    "banding_gain": 0.014647603034973145,
+    "smooth_area_frac": 0.7867313027381897,
+    "chroma_shift_p95_in_subject": 19.308984756469727,
+    "min": 0.0178081002086401,
+    "max": 1.0,
+    "finite": true
+  },
+  "gate_log": [
+    {
+      "strength": 1.0,
+      "ok": true,
+      "fails": []
+    }
+  ],
+  "L_orig": {
+    "kind": "directional",
+    "azimuth": null,
+    "elevation": null,
+    "pos": [
+      0.859248161315918,
+      -0.11870395392179489,
+      0.497594952583313
+    ],
+    "distance": 1.5,
+    "intensity": 0.75,
+    "kelvin": 6500.0,
+    "size": [
+      0.8,
+      0.6
+    ],
+    "samples": 3,
+    "softness": 0.3,
+    "k1": 0.0,
+    "k2": 0.35,
+    "cone_outer_deg": 40.0,
+    "cone_inner_deg": null,
+    "aim": [
+      0.0,
+      0.0
+    ],
+    "pool": 0.0,
+    "pool_radius": 0.9,
+    "shadow": 0.0,
+    "specular": 1.0,
+    "ground_intensity": 0.3,
+    "ground_kelvin": 4000.0,
+    "rim_power": 2.5
+  }
+}

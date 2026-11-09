@@ -1,0 +1,21 @@
+{
+  "metrics": {
+    "detail_ratio_median": 0.9630146026611328,
+    "detail_lock_error_log": 0.08026489615440369,
+    "banding_orig": 0.49987542629241943,
+    "banding_relit": 0.5068269371986389,
+    "banding_gain": 0.006951510906219482,
+    "smooth_area_frac": 0.7966884970664978,
+    "chroma_shift_p95_in_subject": 15.831525802612305,
+    "min": 0.0008157051634043455,
+    "max": 1.0,
+    "finite": true
+  },
+  "gate_log": [
+    {
+      "strength": 1.0,
+      "ok": true,
+      "fails": []
+    }
+  ]
+}

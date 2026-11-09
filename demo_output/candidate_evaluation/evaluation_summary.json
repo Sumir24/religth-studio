@@ -1,0 +1,122 @@
+[
+  {
+    "name": "nike_sneaker",
+    "shape": "576x1024",
+    "time_ms": 1448.4,
+    "metrics": {
+      "detail_ratio_median": 0.9880061149597168,
+      "detail_lock_error_log": 0.04003383219242096,
+      "banding_orig": 0.49987542629241943,
+      "banding_relit": 0.4919070601463318,
+      "banding_gain": -0.007968366146087646,
+      "smooth_area_frac": 0.7993096113204956,
+      "chroma_shift_p95_in_subject": 7.703774929046631,
+      "min": 0.0,
+      "max": 1.0,
+      "finite": true
+    },
+    "gate_log": [
+      {
+        "strength": 1.0,
+        "ok": true,
+        "fails": []
+      }
+    ]
+  },
+  {
+    "name": "classical_statue",
+    "shape": "576x1024",
+    "time_ms": 1255.7,
+    "metrics": {
+      "detail_ratio_median": 0.9931355118751526,
+      "detail_lock_error_log": 0.01880563423037529,
+      "banding_orig": 0.8702674508094788,
+      "banding_relit": 0.10233195871114731,
+      "banding_gain": -0.7679354920983315,
+      "smooth_area_frac": 0.0691392719745636,
+      "chroma_shift_p95_in_subject": 13.659378051757812,
+      "min": 0.0028261495754122734,
+      "max": 1.0,
+      "finite": true
+    },
+    "gate_log": [
+      {
+        "strength": 1.0,
+        "ok": true,
+        "fails": []
+      }
+    ]
+  },
+  {
+    "name": "alpine_landscape",
+    "shape": "576x1024",
+    "time_ms": 1443.0,
+    "metrics": {
+      "detail_ratio_median": 1.0183963775634766,
+      "detail_lock_error_log": 0.01145412027835846,
+      "banding_orig": 0.40348032116889954,
+      "banding_relit": 0.38531026244163513,
+      "banding_gain": -0.018170058727264404,
+      "smooth_area_frac": 0.4394039511680603,
+      "chroma_shift_p95_in_subject": 16.569231033325195,
+      "min": 0.0,
+      "max": 1.0,
+      "finite": true
+    },
+    "gate_log": [
+      {
+        "strength": 1.0,
+        "ok": true,
+        "fails": []
+      }
+    ]
+  },
+  {
+    "name": "sailboat_sea",
+    "shape": "680x1024",
+    "time_ms": 3743.1,
+    "metrics": {
+      "detail_ratio_median": 0.8951076865196228,
+      "detail_lock_error_log": 0.10516620427370071,
+      "banding_orig": 0.5926660895347595,
+      "banding_relit": 0.6632723808288574,
+      "banding_gain": 0.0706062912940979,
+      "smooth_area_frac": 0.6749052405357361,
+      "chroma_shift_p95_in_subject": 14.248632431030273,
+      "min": 0.0,
+      "max": 1.0,
+      "finite": true
+    },
+    "gate_log": [
+      {
+        "strength": 1.0,
+        "ok": true,
+        "fails": []
+      }
+    ]
+  },
+  {
+    "name": "landscape_sun",
+    "shape": "768x512",
+    "time_ms": 367.9,
+    "metrics": {
+      "detail_ratio_median": 1.0004833936691284,
+      "detail_lock_error_log": 0.03475414961576462,
+      "banding_orig": 0.9983896017074585,
+      "banding_relit": 0.6983659863471985,
+      "banding_gain": -0.30002361536026,
+      "smooth_area_frac": 0.8193410038948059,
+      "chroma_shift_p95_in_subject": 10.886096000671387,
+      "min": 0.0,
+      "max": 1.0,
+      "finite": true
+    },
+    "gate_log": [
+      {
+        "strength": 1.0,
+        "ok": true,
+        "fails": []
+      }
+    ]
+  }
+]
