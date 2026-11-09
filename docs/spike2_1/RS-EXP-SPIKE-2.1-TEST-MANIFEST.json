@@ -1,0 +1,122 @@
+{
+  "manifest_version": "RS-EXP-SPIKE-2.1-v1.0",
+  "created_at": "2026-11-09T19:38:00Z",
+  "description": "Comprehensive test manifest for Spike 2.1 shadow transport, contact grounding, and geometric uncertainty validation.",
+  "synthetic_scenes": [
+    {
+      "id": "S1_grounded_sphere",
+      "name": "Grounded Sphere on Planar Floor",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Analytical sphere of radius R=0.45 resting on planar floor at y=0 (h=0). Zero-distance contact interface.",
+      "evaluates": ["CGS", "SDG", "SBC", "SDE", "IoU", "PSF", "FOR", "DCI_shadow"],
+      "lighting_profiles": ["Key_Long_Shadow", "Key_Medium_Ground", "Key_High_Noon"]
+    },
+    {
+      "id": "S2_hovering_sphere_sweep",
+      "name": "Elevating Sphere Detachment Sweep",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Analytical sphere at controlled elevations h in {0.0, 0.05, 0.20, 0.50} above planar floor.",
+      "evaluates": ["CGS_transition", "SDG_monotonicity", "SDE", "PSF"],
+      "lighting_profiles": ["Key_Medium_Ground"]
+    },
+    {
+      "id": "S3_step_box_90deg",
+      "name": "Rectangular Step Box with 90° Vertical Cliff",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Solid cube with sharp 90° depth cliffs resting on planar floor.",
+      "evaluates": ["SLR", "SBC", "SDE", "Cliff_Dampening"],
+      "lighting_profiles": ["Key_Medium_Ground", "Key_Grazing_Cliff"]
+    },
+    {
+      "id": "S4_shoe_hull",
+      "name": "Irregular Shoe-like Procedural Hull",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Composite hull with elongated sole, curved upper, and variable contact line.",
+      "evaluates": ["CGS", "SDG", "SBC", "SDE", "IoU"],
+      "lighting_profiles": ["Warm_Key_Left", "Cool_Rim_Right"]
+    },
+    {
+      "id": "S5_horizontal_cylinder",
+      "name": "Horizontal Cylinder on Planar Floor",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Continuous linear contact line across cylindrical geometry.",
+      "evaluates": ["CGS", "Linear_Contact_Continuity", "SDE"],
+      "lighting_profiles": ["Key_Medium_Ground"]
+    },
+    {
+      "id": "S6_vertical_wall",
+      "name": "Two-Plane Receiver: Floor and Vertical Wall",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Sphere positioned near 90° corner formed by horizontal floor (y=0) and vertical wall (z=-1.0).",
+      "evaluates": ["Multi_Plane_Receiver_Projection", "Corner_Shadow_Continuity"],
+      "lighting_profiles": ["Key_Wall_Projection"]
+    },
+    {
+      "id": "S7_multi_contact_bench",
+      "name": "Multi-Contact Object (Two-Leg Bench)",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Bench with two discrete pillar supports testing isolated contact patches and bridging arch shadow.",
+      "evaluates": ["Disjoint_Contact_CGS", "Arch_Self_Occlusion"],
+      "lighting_profiles": ["Key_Medium_Ground"]
+    },
+    {
+      "id": "S8_overlapping_casters",
+      "name": "Two Overlapping Objects in Depth",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Foreground sphere casting shadow onto a mid-ground box, which casts shadow onto the floor.",
+      "evaluates": ["Inter_Object_Shadowing", "Receiver_Depth_Stratification"],
+      "lighting_profiles": ["Key_Medium_Ground"]
+    },
+    {
+      "id": "S9_concave_cavity",
+      "name": "Concave Hemispherical Bowl",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Hollow interior bowl evaluating cavity ambient occlusion and interior self-occlusion.",
+      "evaluates": ["A_ambient_Interior", "V_self_Interior", "Direct_Light_Line_Of_Sight"],
+      "lighting_profiles": ["Key_Interior_Illumination", "Key_Raking_Rim"]
+    },
+    {
+      "id": "S10_thin_protrusion",
+      "name": "Thin Vertical Needle / Rod on Floor",
+      "geometry_class": "G1_Procedural_Ground_Truth",
+      "description": "Sub-pixel to fine rod (r=0.015) testing penumbral dissipation and thin-feature preservation.",
+      "evaluates": ["Sub_Pixel_Shadow_Persistence", "Penumbra_Dissipation"],
+      "lighting_profiles": ["Key_Medium_Ground"]
+    }
+  ],
+  "photographic_cases": [
+    {
+      "id": "R1_sneaker",
+      "name": "Nike E-Commerce Sneaker on Studio Floor",
+      "geometry_class": "G3_Coarse_Depth_Refined_Normals",
+      "image_path": "demo_output/nike_sample.jpg",
+      "depth_path": "demo_output/nike_test/depth.png",
+      "normals_path": "demo_output/nike_test/normals.png",
+      "ground_y": 648,
+      "challenges": ["Sole tread lug cavities", "Micro-contact seam", "Studio floor reflection"],
+      "evaluates": ["CGS", "SDG", "SBC", "SLR", "DCI_shadow"]
+    },
+    {
+      "id": "R2_classical_statue",
+      "name": "Freestanding Classical Broken Statue on Pedestal",
+      "geometry_class": "G3_Coarse_Depth_Refined_Normals",
+      "image_path": "/Users/sumirdayal/.gemini/antigravity/brain/8c8e6f48-9260-4886-bd57-fd6e83c44dae/.user_uploaded/media_1794143824741_478ce89a.jpg",
+      "depth_path": "/Users/sumirdayal/.gemini/antigravity/brain/8c8e6f48-9260-4886-bd57-fd6e83c44dae/statue_depth.png",
+      "normals_path": "/Users/sumirdayal/.gemini/antigravity/brain/8c8e6f48-9260-4886-bd57-fd6e83c44dae/statue_normals.jpg",
+      "ground_y": 988,
+      "challenges": ["Marble drapery self-shadowing", "Pedestal base grounding", "Silhouette boundary cliffs"],
+      "evaluates": ["CGS", "SBC", "SLR", "DCI_shadow"]
+    },
+    {
+      "id": "R3_architectural_relief",
+      "name": "Classical Architectural Relief / Mountain Horizon",
+      "geometry_class": "G4_Relief_Terrain",
+      "image_path": "demo_output/01_original.png",
+      "depth_path": "demo_output/02_depth_map.png",
+      "normals_path": "demo_output/03_surface_normals.png",
+      "ground_y": 352,
+      "challenges": ["Sloping landscape terrain", "Deep valley shadow crevices", "Sky silhouette boundary"],
+      "evaluates": ["CGS", "SBC", "SLR", "DCI_shadow"]
+    }
+  ]
+}
