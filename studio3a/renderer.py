@@ -20,7 +20,7 @@ from studio3a.scene import (
 )
 from studio3a.camera import Camera3D
 from studio3a.geometry import (
-    OrientedBoundingBox, SuperquadricEllipsoid, LowPolyMesh,
+    OrientedBoundingBox, SuperquadricEllipsoid, SphereProxy, LowPolyMesh,
     GroundPlaneReceiver, CycloramaReceiver
 )
 from studio3a.lighting import RectangularAreaLight
@@ -72,6 +72,11 @@ class RenderBackend:
                 radii=subj.dimensions,
                 sq_exponents=subj.sq_exponents,
                 rotation_euler=subj.rotation_deg
+            )
+        elif subj.proxy_type == ProxyType.SPHERE:
+            return SphereProxy(
+                position=subj.position,
+                radius=subj.dimensions[0]
             )
         elif subj.proxy_type == ProxyType.MESH:
             return LowPolyMesh.create_footwear_hull(

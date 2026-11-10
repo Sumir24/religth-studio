@@ -43,7 +43,8 @@ class MetalRenderBackend:
         normals_map: np.ndarray,
         fg_mask: np.ndarray,
         quality: Optional[RenderQuality] = None,
-        protected_mask: Optional[np.ndarray] = None
+        protected_mask: Optional[np.ndarray] = None,
+        generate_overlay: bool = False
     ) -> Dict[str, Any]:
         """
         Executes scene-driven relighting pass on Apple Silicon GPU.
@@ -100,6 +101,12 @@ class MetalRenderBackend:
             c_proxy.half_extents[2] = float(subj.dimensions[2])
             c_proxy.sq_exponents[0] = float(subj.sq_exponents[0])
             c_proxy.sq_exponents[1] = float(subj.sq_exponents[1])
+        elif subj.proxy_type == ProxyType.SPHERE:
+            c_proxy.proxy_type = 3
+            radius = float(subj.dimensions[0])
+            c_proxy.half_extents[0] = radius
+            c_proxy.half_extents[1] = radius
+            c_proxy.half_extents[2] = radius
         elif subj.proxy_type == ProxyType.MESH:
             c_proxy.proxy_type = 2
             c_proxy.half_extents[0] = float(subj.dimensions[0] * 0.5)
@@ -204,6 +211,7 @@ class MetalRenderBackend:
 
         total_wall_ms = (time.time() - t0) * 1000.0
 
+        pool_stats = self.bridge.get_buffer_pool_stats()
         self._last_diagnostics = {
             "gpu_time_ms": round(gpu_time_ms, 2),
             "total_wall_ms": round(total_wall_ms, 2),
@@ -211,11 +219,13 @@ class MetalRenderBackend:
             "sample_count": n_samples,
             "proxy_type": scene.subject.proxy_type.value,
             "receiver_type": scene.receiver.receiver_type.value,
-            "device": "Apple Silicon (Metal)"
+            "device": "Apple Silicon (Metal)",
+            "buffer_pool_alloc_count": pool_stats["alloc_count"],
+            "buffer_pool_steady_frames": pool_stats["steady_frames"],
         }
 
-        # Wireframe overlay
-        proxy_overlay = self._generate_proxy_overlay(cam, subj, image_orig_srgb)
+        # Wireframe overlay (optional, avoided on hot interactive loop)
+        proxy_overlay = self._generate_proxy_overlay(cam, subj, image_orig_srgb) if generate_overlay else None
 
         return {
             "relit_srgb": out_relit,
@@ -227,6 +237,10 @@ class MetalRenderBackend:
             "proxy_overlay": proxy_overlay,
             "diagnostics": self._last_diagnostics
         }
+
+    def render_interactive_frame(self, *args, **kwargs) -> Dict[str, Any]:
+        """Alias for render matching CPURenderBackend contract."""
+        return self.render(*args, **kwargs)
 
     def _generate_proxy_overlay(self, cam: Camera3D, subj, image_srgb: np.ndarray) -> np.ndarray:
         import cv2

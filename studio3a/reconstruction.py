@@ -230,3 +230,45 @@ class ReconstructionEngine:
             "R_eff": R_eff,
             "err_rgb": err_rgb
         }
+
+
+def compute_DCI(img_orig: np.ndarray, img_relit: np.ndarray, mask: Optional[np.ndarray] = None) -> float:
+    """
+    Detail Conservation Index (DCI): Structural Laplacian SSIM correlation (Spike 1 standard).
+    Measures preservation of high-frequency structural texture and fine micro-contrast.
+    Formula: s_map = (2 * sigma_xy + C3) / (2 * sigma_x * sigma_y + C3) on 3x3 Laplacian maps.
+    Supports whole-image and foreground-masked evaluation.
+    """
+    if img_orig.ndim == 3:
+        Y_orig = linear_to_luminance(srgb_to_linear(img_orig))
+    else:
+        Y_orig = img_orig.astype(np.float32)
+
+    if img_relit.ndim == 3:
+        Y_relit = linear_to_luminance(srgb_to_linear(img_relit))
+    else:
+        Y_relit = img_relit.astype(np.float32)
+
+    lap_orig = cv2.Laplacian(Y_orig, cv2.CV_32F, ksize=3)
+    lap_relit = cv2.Laplacian(Y_relit, cv2.CV_32F, ksize=3)
+
+    win_size = 11
+    sigma = 1.5
+    C3 = (0.03 * 1.0) ** 2 / 2.0
+
+    mu_x = cv2.GaussianBlur(lap_orig, (win_size, win_size), sigma)
+    mu_y = cv2.GaussianBlur(lap_relit, (win_size, win_size), sigma)
+
+    sigma_x_sq = cv2.GaussianBlur(lap_orig ** 2, (win_size, win_size), sigma) - mu_x ** 2
+    sigma_y_sq = cv2.GaussianBlur(lap_relit ** 2, (win_size, win_size), sigma) - mu_y ** 2
+    sigma_xy = cv2.GaussianBlur(lap_orig * lap_relit, (win_size, win_size), sigma) - mu_x * mu_y
+
+    sigma_x = np.sqrt(np.maximum(0.0, sigma_x_sq))
+    sigma_y = np.sqrt(np.maximum(0.0, sigma_y_sq))
+
+    s_map = (2.0 * sigma_xy + C3) / (2.0 * sigma_x * sigma_y + C3)
+
+    if mask is not None and np.any(mask):
+        m_bool = (mask > 0.5) if mask.dtype != bool else mask
+        return round(float(np.mean(s_map[m_bool])), 5)
+    return round(float(np.mean(s_map)), 5)

@@ -29,7 +29,7 @@ struct LightParams {
 };
 
 struct ProxyParams {
-    uint proxy_type;          // 0: OBB, 1: SUPERQUADRIC, 2: MESH
+    uint proxy_type;          // 0: OBB, 1: SUPERQUADRIC, 2: MESH, 3: SPHERE
     packed_float3 position;
     packed_float3 half_extents;
     float rot_matrix[9];      // 3x3 rotation matrix (row-major)
@@ -284,6 +284,39 @@ inline bool intersect_mesh(
     return false;
 }
 
+inline bool intersect_sphere(
+    float3 ray_o, float3 ray_d,
+    constant const ProxyParams& proxy,
+    thread float& out_t, thread float3& out_normal
+) {
+    float3 center = float3(proxy.position);
+    float radius = proxy.half_extents.x;
+    float3 oc = ray_o - center;
+    float b = dot(oc, ray_d);
+    
+    // Numerically robust closest-approach formulation
+    float3 p_perp = oc - b * ray_d;
+    float d_perp_sq = dot(p_perp, p_perp);
+    float r_sq = radius * radius;
+    if (d_perp_sq > r_sq) return false;
+    
+    float half_chord = sqrt(max(0.0f, r_sq - d_perp_sq));
+    float t0 = -b - half_chord;
+    float t1 = -b + half_chord;
+    
+    if (t0 > 1e-4f) {
+        out_t = t0;
+        out_normal = normalize(oc + t0 * ray_d);
+        return true;
+    }
+    if (t1 > 1e-4f) {
+        out_t = t1;
+        out_normal = normalize(oc + t1 * ray_d);
+        return true;
+    }
+    return false;
+}
+
 inline bool intersect_cyclorama(
     float3 ray_o, float3 ray_d,
     constant const ReceiverParams& rec,
@@ -498,6 +531,8 @@ kernel void render_hybrid_studio_kernel(
                 is_blocked = intersect_superquadric(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
             } else if (proxy.proxy_type == 2 && mesh_triangles) {
                 is_blocked = intersect_mesh(p_bias, L_dir, mesh_triangles, proxy.num_triangles, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
+            } else if (proxy.proxy_type == 3) {
+                is_blocked = intersect_sphere(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
             }
 
             // 2. Occlusion by receiver geometry (cyclorama cove self-shadowing)
@@ -545,6 +580,10 @@ kernel void render_hybrid_studio_kernel(
                 float d_pts = sqrt(p_loc.x * p_loc.x + p_loc.z * p_loc.z);
                 float d_bnd = sqrt(xb * xb + zb * zb);
                 dist_to_edge = max(0.0f, d_pts - d_bnd);
+            } else if (proxy.proxy_type == 3) {
+                // Sphere: exact circular contact footprint at tangential base point
+                float d_pts = length(p_loc.xz);
+                dist_to_edge = d_pts;
             } else {
                 // OBB & default: 2D box boundary distance
                 float hx = proxy.half_extents.x;
@@ -576,4 +615,297 @@ kernel void render_hybrid_studio_kernel(
     float3 relit_lin = orig_lin * (irr_acc * visibility + 0.15f);
     float3 relit_srgb = clamp(pow(relit_lin, 1.0f / 2.2f), 0.0f, 1.0f);
     out_relit_srgb[idx] = packed_float3(relit_srgb.x, relit_srgb.y, relit_srgb.z);
+}
+
+// -----------------------------------------------------------------------------
+// 5. E.1 GUIDED-FILTER REGULARIZATION & C3 OKLAB CONSTANT-HUE GAMUT MAPPING
+// -----------------------------------------------------------------------------
+
+inline float3 srgb_to_linear_exact(float3 srgb) {
+    float3 lin;
+    lin.r = (srgb.r <= 0.04045f) ? (srgb.r / 12.92f) : pow((srgb.r + 0.055f) / 1.055f, 2.4f);
+    lin.g = (srgb.g <= 0.04045f) ? (srgb.g / 12.92f) : pow((srgb.g + 0.055f) / 1.055f, 2.4f);
+    lin.b = (srgb.b <= 0.04045f) ? (srgb.b / 12.92f) : pow((srgb.b + 0.055f) / 1.055f, 2.4f);
+    return lin;
+}
+
+inline float3 linear_to_srgb_exact(float3 lin) {
+    float3 srgb;
+    srgb.r = (lin.r <= 0.0031308f) ? (lin.r * 12.92f) : (1.055f * pow(max(lin.r, 0.0f), 1.0f / 2.4f) - 0.055f);
+    srgb.g = (lin.g <= 0.0031308f) ? (lin.g * 12.92f) : (1.055f * pow(max(lin.g, 0.0f), 1.0f / 2.4f) - 0.055f);
+    srgb.b = (lin.b <= 0.0031308f) ? (lin.b * 12.92f) : (1.055f * pow(max(lin.b, 0.0f), 1.0f / 2.4f) - 0.055f);
+    return clamp(srgb, 0.0f, 1.0f);
+}
+
+inline float3 linear_srgb_to_oklab(float3 c) {
+    float l = 0.4122214708f * c.r + 0.5363325363f * c.g + 0.0514459929f * c.b;
+    float m = 0.2119034982f * c.r + 0.6806995451f * c.g + 0.1073969566f * c.b;
+    float s = 0.0883024619f * c.r + 0.2817188376f * c.g + 0.6299787005f * c.b;
+
+    float l_ = pow(max(l, 0.0f), 1.0f / 3.0f);
+    float m_ = pow(max(m, 0.0f), 1.0f / 3.0f);
+    float s_ = pow(max(s, 0.0f), 1.0f / 3.0f);
+
+    return float3(
+        0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_,
+        1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_,
+        0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_
+    );
+}
+
+inline float3 oklab_to_linear_srgb(float3 c) {
+    float l_ = c.x + 0.3963377774f * c.y + 0.2158037573f * c.z;
+    float m_ = c.x - 0.1055613458f * c.y - 0.0638541728f * c.z;
+    float s_ = c.x - 0.0894841775f * c.y - 1.2914855480f * c.z;
+
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+
+    return float3(
+        +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s,
+        -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s,
+        -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s
+    );
+}
+
+inline bool is_in_srgb_gamut(float3 rgb) {
+    return (rgb.r >= -1e-4f && rgb.r <= 1.0f + 1e-4f &&
+            rgb.g >= -1e-4f && rgb.g <= 1.0f + 1e-4f &&
+            rgb.b >= -1e-4f && rgb.b <= 1.0f + 1e-4f);
+}
+
+inline int reflect_index(int k, int n) {
+    while (k < 0 || k >= n) {
+        if (k < 0) {
+            k = -1 - k;
+        } else if (k >= n) {
+            k = 2 * n - 1 - k;
+        }
+    }
+    return k;
+}
+
+// Pass 1: Initialize E.1 Guidance & Target Shading Ratio into float4
+kernel void e1_init_stats_kernel(
+    device const packed_float3* image_orig_srgb [[buffer(0)]],
+    device const packed_float3* direct_irr      [[buffer(1)]],
+    device const float* direct_vis              [[buffer(2)]],
+    device const uint8_t* protected_mask        [[buffer(3)]],
+    device float4* out_stats4                   [[buffer(4)]],
+    constant float& ambient_fill                [[buffer(5)]],
+    constant uint& has_protected_mask           [[buffer(6)]],
+    constant uint& width                        [[buffer(7)]],
+    constant uint& height                       [[buffer(8)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    uint idx = coord.y * width + coord.x;
+
+    float3 srgb = float3(image_orig_srgb[idx]);
+    float3 lin = srgb_to_linear_exact(srgb);
+    float Y_orig = 0.2126f * lin.r + 0.7152f * lin.g + 0.0722f * lin.b;
+
+    float3 irr = float3(direct_irr[idx]);
+    float irr_luma = 0.2126f * irr.r + 0.7152f * irr.g + 0.0722f * irr.b;
+    float vis = direct_vis[idx];
+
+    float R_target = clamp(ambient_fill + irr_luma * vis, 0.05f, 20.0f);
+
+    // Highlight protection shoulder
+    float m_high = clamp((Y_orig - 0.75f) / (0.98f - 0.75f), 0.0f, 1.0f);
+    m_high = m_high * m_high * (3.0f - 2.0f * m_high);
+    float R_eff = (1.0f - m_high) * R_target + m_high * 1.0f;
+
+    if (has_protected_mask != 0 && protected_mask[idx] != 0) {
+        R_eff = 1.0f;
+    }
+
+    float rho = log(max(R_eff, 1e-4f));
+
+    // Pack: (I, p, I*I, I*p)
+    out_stats4[idx] = float4(Y_orig, rho, Y_orig * Y_orig, Y_orig * rho);
+}
+
+// Pass 2: Separable Horizontal Box Filter for float4
+kernel void box_filter_h_float4(
+    device const float4* src                    [[buffer(0)]],
+    device float4* dst                          [[buffer(1)]],
+    constant int& radius                        [[buffer(2)]],
+    constant uint& width                        [[buffer(3)]],
+    constant uint& height                       [[buffer(4)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    int y = int(coord.y);
+    int x = int(coord.x);
+    int W = int(width);
+
+    float4 sum = float4(0.0f);
+    for (int dx = -radius; dx <= radius; ++dx) {
+        int rx = reflect_index(x + dx, W);
+        sum += src[y * W + rx];
+    }
+    dst[y * W + x] = sum / float(2 * radius + 1);
+}
+
+// Pass 3: Separable Vertical Box Filter for float4
+kernel void box_filter_v_float4(
+    device const float4* src                    [[buffer(0)]],
+    device float4* dst                          [[buffer(1)]],
+    constant int& radius                        [[buffer(2)]],
+    constant uint& width                        [[buffer(3)]],
+    constant uint& height                       [[buffer(4)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    int y = int(coord.y);
+    int x = int(coord.x);
+    int W = int(width);
+    int H = int(height);
+
+    float4 sum = float4(0.0f);
+    for (int dy = -radius; dy <= radius; ++dy) {
+        int ry = reflect_index(y + dy, H);
+        sum += src[ry * W + x];
+    }
+    dst[y * W + x] = sum / float(2 * radius + 1);
+}
+
+// Pass 4: Compute Linear Coefficients a and b from mean4
+kernel void e1_compute_ab_kernel(
+    device const float4* mean4                  [[buffer(0)]],
+    device float2* out_ab                       [[buffer(1)]],
+    constant float& eps                         [[buffer(2)]],
+    constant uint& width                        [[buffer(3)]],
+    constant uint& height                       [[buffer(4)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    uint idx = coord.y * width + coord.x;
+
+    float4 m = mean4[idx];
+    float mean_I = m.x;
+    float mean_p = m.y;
+    float mean_II = m.z;
+    float mean_Ip = m.w;
+
+    float var_I = max(0.0f, mean_II - mean_I * mean_I);
+    float cov_Ip = mean_Ip - mean_I * mean_p;
+
+    float a = cov_Ip / (var_I + eps);
+    float b = mean_p - a * mean_I;
+
+    out_ab[idx] = float2(a, b);
+}
+
+// Pass 5: Separable Horizontal Box Filter for float2
+kernel void box_filter_h_float2(
+    device const float2* src                    [[buffer(0)]],
+    device float2* dst                          [[buffer(1)]],
+    constant int& radius                        [[buffer(2)]],
+    constant uint& width                        [[buffer(3)]],
+    constant uint& height                       [[buffer(4)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    int y = int(coord.y);
+    int x = int(coord.x);
+    int W = int(width);
+
+    float2 sum = float2(0.0f);
+    for (int dx = -radius; dx <= radius; ++dx) {
+        int rx = reflect_index(x + dx, W);
+        sum += src[y * W + rx];
+    }
+    dst[y * W + x] = sum / float(2 * radius + 1);
+}
+
+// Pass 6: Separable Vertical Box Filter for float2
+kernel void box_filter_v_float2(
+    device const float2* src                    [[buffer(0)]],
+    device float2* dst                          [[buffer(1)]],
+    constant int& radius                        [[buffer(2)]],
+    constant uint& width                        [[buffer(3)]],
+    constant uint& height                       [[buffer(4)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    int y = int(coord.y);
+    int x = int(coord.x);
+    int W = int(width);
+    int H = int(height);
+
+    float2 sum = float2(0.0f);
+    for (int dy = -radius; dy <= radius; ++dy) {
+        int ry = reflect_index(y + dy, H);
+        sum += src[ry * W + x];
+    }
+    dst[y * W + x] = sum / float(2 * radius + 1);
+}
+
+// Pass 7: Final E.1 Reconstruction with C3 Oklab Constant-Hue Gamut Mapping
+kernel void e1_reconstruct_c3_kernel(
+    device const packed_float3* image_orig_srgb [[buffer(0)]],
+    device const float2* mean_ab                [[buffer(1)]],
+    device const uint8_t* protected_mask        [[buffer(2)]],
+    device packed_float3* out_relit_srgb        [[buffer(3)]],
+    constant uint& has_protected_mask           [[buffer(4)]],
+    constant uint& width                        [[buffer(5)]],
+    constant uint& height                       [[buffer(6)]],
+    uint2 coord                                 [[thread_position_in_grid]]
+) {
+    if (coord.x >= width || coord.y >= height) return;
+    uint idx = coord.y * width + coord.x;
+
+    if (has_protected_mask != 0 && protected_mask[idx] != 0) {
+        out_relit_srgb[idx] = image_orig_srgb[idx];
+        return;
+    }
+
+    float3 srgb_orig = float3(image_orig_srgb[idx]);
+    float3 lin_orig = srgb_to_linear_exact(srgb_orig);
+    float Y_orig = 0.2126f * lin_orig.r + 0.7152f * lin_orig.g + 0.0722f * lin_orig.b;
+
+    float2 ab = mean_ab[idx];
+    float rho_bar = ab.x * Y_orig + ab.y;
+    float Y_relit = max(1e-4f, Y_orig * exp(rho_bar));
+
+    // C3 Oklab Constant-Hue Gamut Mapping
+    float scale = Y_relit / max(Y_orig, 1e-6f);
+    float3 ref_rgb = lin_orig * scale;
+    float3 lab_ref = linear_srgb_to_oklab(max(ref_rgb, 0.0f));
+    float3 lab_orig = linear_srgb_to_oklab(max(lin_orig, 0.0f));
+
+    float L_target = lab_ref.x;
+    float L_disp = (L_target <= 0.90f) ? max(1e-4f, L_target) : (0.90f + 0.10f * tanh((L_target - 0.90f) / 0.10f));
+
+    float a_orig = lab_orig.y;
+    float b_orig = lab_orig.z;
+    float chroma = sqrt(a_orig * a_orig + b_orig * b_orig);
+    float a_init = (chroma < 1e-4f) ? 0.0f : a_orig;
+    float b_init = (chroma < 1e-4f) ? 0.0f : b_orig;
+
+    float3 test_rgb = oklab_to_linear_srgb(float3(L_disp, a_init, b_init));
+    float3 final_lin;
+
+    if (is_in_srgb_gamut(test_rgb) || chroma < 1e-4f) {
+        final_lin = clamp(test_rgb, 0.0f, 1.0f);
+    } else {
+        float t_low = 0.0f;
+        float t_high = 1.0f;
+        for (int iter = 0; iter < 8; ++iter) {
+            float t_mid = 0.5f * (t_low + t_high);
+            float3 rgb_mid = oklab_to_linear_srgb(float3(L_disp, a_init * t_mid, b_init * t_mid));
+            if (is_in_srgb_gamut(rgb_mid)) {
+                t_low = t_mid;
+            } else {
+                t_high = t_mid;
+            }
+        }
+        final_lin = clamp(oklab_to_linear_srgb(float3(L_disp, a_init * t_low, b_init * t_low)), 0.0f, 1.0f);
+    }
+
+    float3 final_srgb = linear_to_srgb_exact(final_lin);
+    out_relit_srgb[idx] = packed_float3(final_srgb.x, final_srgb.y, final_srgb.z);
 }

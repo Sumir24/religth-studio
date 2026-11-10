@@ -121,6 +121,10 @@ int metal2_render_frame(
     float* out_gpu_time_ms
 );
 
+// Buffer Pool Diagnostics
+int metal2_get_buffer_pool_stats(uint32_t* out_alloc_count, uint32_t* out_steady_frames);
+int metal2_reset_buffer_pool(void);
+
 #ifdef __cplusplus
 }
 #endif

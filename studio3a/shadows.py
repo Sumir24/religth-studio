@@ -165,14 +165,10 @@ class ShadowEngine:
         p_near = surface_pos[near_ground]
         
         # Exact distance to proxy footprint boundary in horizontal XZ plane
-        if hasattr(self.proxy, 'half_extents') and hasattr(self.proxy, 'R'):
-            # OBB: Exact 2D box boundary distance in proxy local coordinates
+        if hasattr(self.proxy, 'radius'):
+            # Sphere: exact distance to tangential contact point at (center.x, center.z)
             p_rel = p_near - self.proxy.center
-            p_local = p_rel @ self.proxy.R
-            hx, hz = self.proxy.half_extents[0], self.proxy.half_extents[2]
-            dx = np.maximum(0.0, np.abs(p_local[:, 0]) - hx)
-            dz = np.maximum(0.0, np.abs(p_local[:, 2]) - hz)
-            dist_to_edge = np.sqrt(dx * dx + dz * dz)
+            dist_to_edge = np.sqrt(p_rel[:, 0]**2 + p_rel[:, 2]**2)
         elif hasattr(self.proxy, 'radii') and hasattr(self.proxy, 'e2'):
             # Superquadric: Analytical superellipse boundary distance
             p_rel = p_near - self.proxy.center
@@ -187,6 +183,14 @@ class ShadowEngine:
             d_pts = np.sqrt(p_local[:, 0]**2 + p_local[:, 2]**2)
             d_bnd = np.sqrt(xb**2 + zb**2)
             dist_to_edge = np.maximum(0.0, d_pts - d_bnd)
+        elif hasattr(self.proxy, 'half_extents') and hasattr(self.proxy, 'R'):
+            # OBB: Exact 2D box boundary distance in proxy local coordinates
+            p_rel = p_near - self.proxy.center
+            p_local = p_rel @ self.proxy.R
+            hx, hz = self.proxy.half_extents[0], self.proxy.half_extents[2]
+            dx = np.maximum(0.0, np.abs(p_local[:, 0]) - hx)
+            dz = np.maximum(0.0, np.abs(p_local[:, 2]) - hz)
+            dist_to_edge = np.sqrt(dx * dx + dz * dz)
         elif hasattr(self.proxy, 'vertices'):
             # LowPolyMesh: Distance to base footprint
             v_base = self.proxy.vertices[self.proxy.vertices[:, 1] < 0.15]

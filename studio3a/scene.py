@@ -22,6 +22,7 @@ class ProxyType(str, Enum):
     OBB = "OBB"
     SUPERQUADRIC = "SUPERQUADRIC"
     MESH = "MESH"
+    SPHERE = "SPHERE"
 
 
 class ReceiverType(str, Enum):

@@ -255,6 +255,56 @@ class SuperquadricEllipsoid:
 
 
 # ---------------------------------------------------------------------------
+# 2B. EXACT ANALYTICAL SPHERE PROXY
+# ---------------------------------------------------------------------------
+
+class SphereProxy:
+    """
+    Exact analytical sphere proxy geometry.
+    Eliminates OBB cube approximation errors (134.7% area error)
+    by solving ray-sphere intersection analytically via the quadratic formula:
+      |o + t*d - c|^2 = r^2  =>  t^2*|d|^2 + 2*t*(d·(o-c)) + |o-c|^2 - r^2 = 0
+    """
+    def __init__(self, position=(0.0, 0.35, 0.0), radius=0.35):
+        self.center = np.array(position, dtype=np.float32)
+        if isinstance(radius, (list, tuple, np.ndarray)):
+            self.radius = float(radius[0])
+        else:
+            self.radius = float(radius)
+        self.half_extents = np.array([self.radius, self.radius, self.radius], dtype=np.float32)
+        self.R = np.eye(3, dtype=np.float32)
+        self.R_inv = np.eye(3, dtype=np.float32)
+
+    def intersect_rays(self, ray_o: np.ndarray, ray_d: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Vectorized exact analytical ray-sphere intersection.
+        Uses numerically robust closest-approach formulation to eliminate
+        catastrophic floating-point cancellation for distant ray origins.
+        """
+        oc = ray_o - self.center
+        b = np.sum(oc * ray_d, axis=-1)
+        p_perp = oc - b[..., None] * ray_d
+        d_perp_sq = np.sum(p_perp * p_perp, axis=-1)
+        r_sq = self.radius * self.radius
+        hit = d_perp_sq <= r_sq
+
+        half_chord = np.sqrt(np.maximum(0.0, r_sq - d_perp_sq))
+        t0 = -b - half_chord
+        t1 = -b + half_chord
+
+        t = np.where(t0 > 1e-4, t0, np.where(t1 > 1e-4, t1, 1e9))
+        hit = hit & (t < 1e8)
+
+        p = ray_o + t[..., None] * ray_d
+        norm = (p - self.center) / max(self.radius, 1e-6)
+        norm_len = np.linalg.norm(norm, axis=-1, keepdims=True)
+        norm = np.where(norm_len > 1e-6, norm / np.maximum(norm_len, 1e-6), np.array([0.0, 1.0, 0.0], dtype=np.float32))
+        norm = np.where(hit[..., None], norm, np.zeros_like(norm))
+
+        return hit, t.astype(np.float32), norm.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # 3. LOW-POLY MESH PROXY
 # ---------------------------------------------------------------------------
 

@@ -138,6 +138,11 @@ class Metal2Bridge:
         ]
         self.lib.metal2_render_frame.restype = c_int
 
+        self.lib.metal2_get_buffer_pool_stats.argtypes = [POINTER(c_uint32), POINTER(c_uint32)]
+        self.lib.metal2_get_buffer_pool_stats.restype = c_int
+
+        self.lib.metal2_reset_buffer_pool.restype = c_int
+
         self.lib.metal2_shutdown.restype = None
 
         # Initialize device
@@ -308,6 +313,26 @@ class Metal2Bridge:
             raise RuntimeError(f"metal2_render_frame failed on Metal GPU (code: {status})")
 
         return out_relit, out_vis, out_irr, float(gpu_time.value)
+
+    def get_buffer_pool_stats(self) -> Dict[str, int]:
+        """Returns statistics from the persistent UMA buffer pool."""
+        alloc_count = c_uint32(0)
+        steady_frames = c_uint32(0)
+        status = self.lib.metal2_get_buffer_pool_stats(
+            ctypes.byref(alloc_count), ctypes.byref(steady_frames)
+        )
+        if status != 0:
+            raise RuntimeError(f"metal2_get_buffer_pool_stats failed (code: {status})")
+        return {
+            "alloc_count": int(alloc_count.value),
+            "steady_frames": int(steady_frames.value),
+        }
+
+    def reset_buffer_pool(self) -> None:
+        """Frees all cached buffers in the UMA buffer pool."""
+        status = self.lib.metal2_reset_buffer_pool()
+        if status != 0:
+            raise RuntimeError(f"metal2_reset_buffer_pool failed (code: {status})")
 
     def shutdown(self) -> None:
         self.lib.metal2_shutdown()

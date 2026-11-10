@@ -10,6 +10,42 @@ static id<MTLCommandQueue> g_command_queue = nil;
 static id<MTLLibrary> g_library = nil;
 static id<MTLComputePipelineState> g_vec_add_pso = nil;
 static id<MTLComputePipelineState> g_render_pso = nil;
+static id<MTLComputePipelineState> g_e1_init_pso = nil;
+static id<MTLComputePipelineState> g_box_h4_pso = nil;
+static id<MTLComputePipelineState> g_box_v4_pso = nil;
+static id<MTLComputePipelineState> g_e1_ab_pso = nil;
+static id<MTLComputePipelineState> g_box_h2_pso = nil;
+static id<MTLComputePipelineState> g_box_v2_pso = nil;
+static id<MTLComputePipelineState> g_e1_recon_pso = nil;
+
+struct PersistentBufferPool {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    
+    id<MTLBuffer> buf_depth = nil;
+    id<MTLBuffer> buf_norm = nil;
+    id<MTLBuffer> buf_img = nil;
+    id<MTLBuffer> buf_fg = nil;
+    id<MTLBuffer> buf_prot = nil;
+    id<MTLBuffer> buf_out_relit = nil;
+    id<MTLBuffer> buf_out_vis = nil;
+    id<MTLBuffer> buf_out_irr = nil;
+    
+    id<MTLBuffer> buf_triangles = nil;
+    uint32_t num_triangles = 0;
+    
+    // E.1 Intermediate Buffers
+    id<MTLBuffer> buf_stats4 = nil;     // float4
+    id<MTLBuffer> buf_stats4_tmp = nil; // float4
+    id<MTLBuffer> buf_mean4 = nil;      // float4
+    id<MTLBuffer> buf_ab = nil;         // float2
+    id<MTLBuffer> buf_ab_tmp = nil;     // float2
+    id<MTLBuffer> buf_mean_ab = nil;    // float2
+    
+    uint32_t alloc_count = 0;
+    uint32_t steady_frames = 0;
+};
+static PersistentBufferPool g_buffer_pool;
 
 extern "C" {
 
@@ -371,18 +407,30 @@ int metal2_render_frame(
                 return METAL_ERROR_COMPILATION_FAILED;
             }
 
-            id<MTLFunction> fn = [render_lib newFunctionWithName:@"render_hybrid_studio_kernel"];
-            if (!fn) {
-                fprintf(stderr, "[METAL2 ERROR] Function render_hybrid_studio_kernel not found in library.\n");
-                return METAL_ERROR_PIPELINE_CREATION;
-            }
+            auto create_pso = [&](NSString* fn_name, id<MTLComputePipelineState>& out_pso) -> int {
+                id<MTLFunction> fn = [render_lib newFunctionWithName:fn_name];
+                if (!fn) {
+                    fprintf(stderr, "[METAL2 ERROR] Function %s not found in library.\n", [fn_name UTF8String]);
+                    return METAL_ERROR_PIPELINE_CREATION;
+                }
+                out_pso = [g_device newComputePipelineStateWithFunction:fn error:&err];
+                if (!out_pso || err) {
+                    fprintf(stderr, "[METAL2 ERROR] Failed to create pipeline state for %s:\n%s\n",
+                            [fn_name UTF8String], [[err localizedDescription] UTF8String]);
+                    return METAL_ERROR_PIPELINE_CREATION;
+                }
+                return METAL_SUCCESS;
+            };
 
-            g_render_pso = [g_device newComputePipelineStateWithFunction:fn error:&err];
-            if (!g_render_pso || err) {
-                fprintf(stderr, "[METAL2 ERROR] Failed to create pipeline state for render_hybrid_studio_kernel:\n%s\n",
-                        [[err localizedDescription] UTF8String]);
-                return METAL_ERROR_PIPELINE_CREATION;
-            }
+            int s;
+            if ((s = create_pso(@"render_hybrid_studio_kernel", g_render_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"e1_init_stats_kernel", g_e1_init_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"box_filter_h_float4", g_box_h4_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"box_filter_v_float4", g_box_v4_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"e1_compute_ab_kernel", g_e1_ab_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"box_filter_h_float2", g_box_h2_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"box_filter_v_float2", g_box_v2_pso)) != METAL_SUCCESS) return s;
+            if ((s = create_pso(@"e1_reconstruct_c3_kernel", g_e1_recon_pso)) != METAL_SUCCESS) return s;
         }
 
         uint32_t W = cam->width;
@@ -390,59 +438,169 @@ int metal2_render_frame(
         size_t num_pixels = (size_t)W * H;
 
         size_t float_bytes = num_pixels * sizeof(float);
+        size_t float2_bytes = num_pixels * sizeof(float) * 2;
         size_t float3_bytes = num_pixels * sizeof(float) * 3;
+        size_t float4_bytes = num_pixels * sizeof(float) * 4;
         size_t mask_bytes = num_pixels * sizeof(uint8_t);
 
-        // Allocate Shared UMA Buffers
-        id<MTLBuffer> buf_depth = [g_device newBufferWithBytes:depth_map length:float_bytes options:MTLResourceStorageModeShared];
-        id<MTLBuffer> buf_norm = [g_device newBufferWithBytes:normals_map length:float3_bytes options:MTLResourceStorageModeShared];
-        id<MTLBuffer> buf_img = [g_device newBufferWithBytes:image_orig_srgb length:float3_bytes options:MTLResourceStorageModeShared];
+        // Persistent Buffer Pool Allocation / Resize Guard
+        if (g_buffer_pool.width != W || g_buffer_pool.height != H || !g_buffer_pool.buf_depth) {
+            g_buffer_pool.buf_depth = [g_device newBufferWithLength:float_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_norm = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_img = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_fg = [g_device newBufferWithLength:mask_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_prot = [g_device newBufferWithLength:mask_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_out_relit = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_out_vis = [g_device newBufferWithLength:float_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_out_irr = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
 
-        id<MTLBuffer> buf_fg = fg_mask ? [g_device newBufferWithBytes:fg_mask length:mask_bytes options:MTLResourceStorageModeShared] : [g_device newBufferWithLength:16 options:MTLResourceStorageModeShared];
-        id<MTLBuffer> buf_prot = protected_mask ? [g_device newBufferWithBytes:protected_mask length:mask_bytes options:MTLResourceStorageModeShared] : [g_device newBufferWithLength:16 options:MTLResourceStorageModeShared];
-        uint32_t has_prot = (protected_mask != nullptr) ? 1 : 0;
+            // E.1 Intermediate Buffers
+            g_buffer_pool.buf_stats4 = [g_device newBufferWithLength:float4_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_stats4_tmp = [g_device newBufferWithLength:float4_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_mean4 = [g_device newBufferWithLength:float4_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_ab = [g_device newBufferWithLength:float2_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_ab_tmp = [g_device newBufferWithLength:float2_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_mean_ab = [g_device newBufferWithLength:float2_bytes options:MTLResourceStorageModeShared];
 
-        id<MTLBuffer> buf_out_relit = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
-        id<MTLBuffer> buf_out_vis = [g_device newBufferWithLength:float_bytes options:MTLResourceStorageModeShared];
-        id<MTLBuffer> buf_out_irr = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
-
-        id<MTLBuffer> buf_triangles = nil;
-        if (triangles && num_triangles > 0) {
-            buf_triangles = [g_device newBufferWithBytes:triangles length:num_triangles * sizeof(CTriangleMesh) options:MTLResourceStorageModeShared];
+            g_buffer_pool.width = W;
+            g_buffer_pool.height = H;
+            g_buffer_pool.alloc_count++;
+        } else {
+            g_buffer_pool.steady_frames++;
         }
 
-        if (!buf_depth || !buf_norm || !buf_img || !buf_out_relit || !buf_out_vis || !buf_out_irr) {
+        if (!g_buffer_pool.buf_depth || !g_buffer_pool.buf_norm || !g_buffer_pool.buf_img ||
+            !g_buffer_pool.buf_out_relit || !g_buffer_pool.buf_out_vis || !g_buffer_pool.buf_out_irr ||
+            !g_buffer_pool.buf_stats4 || !g_buffer_pool.buf_mean4 || !g_buffer_pool.buf_mean_ab) {
             return METAL_ERROR_BUFFER_ALLOCATION;
+        }
+
+        // Copy input buffers into persistent shared UMA memory
+        memcpy([g_buffer_pool.buf_depth contents], depth_map, float_bytes);
+        memcpy([g_buffer_pool.buf_norm contents], normals_map, float3_bytes);
+        memcpy([g_buffer_pool.buf_img contents], image_orig_srgb, float3_bytes);
+        if (fg_mask) {
+            memcpy([g_buffer_pool.buf_fg contents], fg_mask, mask_bytes);
+        } else {
+            memset([g_buffer_pool.buf_fg contents], 0, mask_bytes);
+        }
+        if (protected_mask) {
+            memcpy([g_buffer_pool.buf_prot contents], protected_mask, mask_bytes);
+        } else {
+            memset([g_buffer_pool.buf_prot contents], 0, mask_bytes);
+        }
+        uint32_t has_prot = (protected_mask != nullptr) ? 1 : 0;
+
+        if (triangles && num_triangles > 0) {
+            if (!g_buffer_pool.buf_triangles || g_buffer_pool.num_triangles < num_triangles) {
+                g_buffer_pool.buf_triangles = [g_device newBufferWithLength:num_triangles * sizeof(CTriangleMesh) options:MTLResourceStorageModeShared];
+                g_buffer_pool.num_triangles = num_triangles;
+            }
+            memcpy([g_buffer_pool.buf_triangles contents], triangles, num_triangles * sizeof(CTriangleMesh));
         }
 
         id<MTLCommandBuffer> cmd_buf = [g_command_queue commandBuffer];
         id<MTLComputeCommandEncoder> encoder = [cmd_buf computeCommandEncoder];
 
+        // 16x16 2D Threadgroups
+        MTLSize threadsPerGroup = MTLSizeMake(16, 16, 1);
+        MTLSize numGroups = MTLSizeMake((W + 15) / 16, (H + 15) / 16, 1);
+
+        // --- PASS 1: Direct 3D Lighting & Shadows ---
         [encoder setComputePipelineState:g_render_pso];
         [encoder setBytes:cam length:sizeof(CCameraParams) atIndex:0];
         [encoder setBytes:proxy length:sizeof(CProxyParams) atIndex:1];
         [encoder setBytes:receiver length:sizeof(CReceiverParams) atIndex:2];
         [encoder setBytes:light length:sizeof(CLightParams) atIndex:3];
-        if (buf_triangles) {
-            [encoder setBuffer:buf_triangles offset:0 atIndex:4];
+        if (g_buffer_pool.buf_triangles && num_triangles > 0) {
+            [encoder setBuffer:g_buffer_pool.buf_triangles offset:0 atIndex:4];
         } else {
-            [encoder setBuffer:buf_depth offset:0 atIndex:4]; // Dummy binding
+            [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:4]; // Dummy binding
         }
-        [encoder setBuffer:buf_depth offset:0 atIndex:5];
-        [encoder setBuffer:buf_norm offset:0 atIndex:6];
-        [encoder setBuffer:buf_fg offset:0 atIndex:7];
-        [encoder setBuffer:buf_prot offset:0 atIndex:8];
-        [encoder setBuffer:buf_img offset:0 atIndex:9];
-        [encoder setBuffer:buf_out_relit offset:0 atIndex:10];
-        [encoder setBuffer:buf_out_vis offset:0 atIndex:11];
-        [encoder setBuffer:buf_out_irr offset:0 atIndex:12];
+        [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:5];
+        [encoder setBuffer:g_buffer_pool.buf_norm offset:0 atIndex:6];
+        [encoder setBuffer:g_buffer_pool.buf_fg offset:0 atIndex:7];
+        [encoder setBuffer:g_buffer_pool.buf_prot offset:0 atIndex:8];
+        [encoder setBuffer:g_buffer_pool.buf_img offset:0 atIndex:9];
+        [encoder setBuffer:g_buffer_pool.buf_out_relit offset:0 atIndex:10];
+        [encoder setBuffer:g_buffer_pool.buf_out_vis offset:0 atIndex:11];
+        [encoder setBuffer:g_buffer_pool.buf_out_irr offset:0 atIndex:12];
         [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:13];
-
-        // 16x16 2D Threadgroups
-        MTLSize threadsPerGroup = MTLSizeMake(16, 16, 1);
-        MTLSize numGroups = MTLSizeMake((W + 15) / 16, (H + 15) / 16, 1);
-
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 2: E.1 Guidance & Target Shading Ratio Initialization ---
+        float ambient_fill = 0.15f;
+        int e1_radius = 16;
+        float e1_eps = 0.0004f; // 0.02^2
+
+        [encoder setComputePipelineState:g_e1_init_pso];
+        [encoder setBuffer:g_buffer_pool.buf_img offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_out_irr offset:0 atIndex:1];
+        [encoder setBuffer:g_buffer_pool.buf_out_vis offset:0 atIndex:2];
+        [encoder setBuffer:g_buffer_pool.buf_prot offset:0 atIndex:3];
+        [encoder setBuffer:g_buffer_pool.buf_stats4 offset:0 atIndex:4];
+        [encoder setBytes:&ambient_fill length:sizeof(float) atIndex:5];
+        [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:6];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:7];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:8];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 3: Box Filter Horizontal (float4) ---
+        [encoder setComputePipelineState:g_box_h4_pso];
+        [encoder setBuffer:g_buffer_pool.buf_stats4 offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_stats4_tmp offset:0 atIndex:1];
+        [encoder setBytes:&e1_radius length:sizeof(int) atIndex:2];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:3];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:4];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 4: Box Filter Vertical (float4) ---
+        [encoder setComputePipelineState:g_box_v4_pso];
+        [encoder setBuffer:g_buffer_pool.buf_stats4_tmp offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_mean4 offset:0 atIndex:1];
+        [encoder setBytes:&e1_radius length:sizeof(int) atIndex:2];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:3];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:4];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 5: Compute Linear Coefficients a and b ---
+        [encoder setComputePipelineState:g_e1_ab_pso];
+        [encoder setBuffer:g_buffer_pool.buf_mean4 offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_ab offset:0 atIndex:1];
+        [encoder setBytes:&e1_eps length:sizeof(float) atIndex:2];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:3];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:4];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 6: Box Filter Horizontal (float2) ---
+        [encoder setComputePipelineState:g_box_h2_pso];
+        [encoder setBuffer:g_buffer_pool.buf_ab offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_ab_tmp offset:0 atIndex:1];
+        [encoder setBytes:&e1_radius length:sizeof(int) atIndex:2];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:3];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:4];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 7: Box Filter Vertical (float2) ---
+        [encoder setComputePipelineState:g_box_v2_pso];
+        [encoder setBuffer:g_buffer_pool.buf_ab_tmp offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_mean_ab offset:0 atIndex:1];
+        [encoder setBytes:&e1_radius length:sizeof(int) atIndex:2];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:3];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:4];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
+        // --- PASS 8: Final E.1 Reconstruction with C3 Oklab Constant-Hue Gamut Mapping ---
+        [encoder setComputePipelineState:g_e1_recon_pso];
+        [encoder setBuffer:g_buffer_pool.buf_img offset:0 atIndex:0];
+        [encoder setBuffer:g_buffer_pool.buf_mean_ab offset:0 atIndex:1];
+        [encoder setBuffer:g_buffer_pool.buf_prot offset:0 atIndex:2];
+        [encoder setBuffer:g_buffer_pool.buf_out_relit offset:0 atIndex:3];
+        [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:4];
+        [encoder setBytes:&W length:sizeof(uint32_t) atIndex:5];
+        [encoder setBytes:&H length:sizeof(uint32_t) atIndex:6];
+        [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
+
         [encoder endEncoding];
 
         auto t_start = std::chrono::high_resolution_clock::now();
@@ -457,9 +615,9 @@ int metal2_render_frame(
         }
 
         // Copy outputs back to host pointers
-        memcpy(out_relit_srgb, [buf_out_relit contents], float3_bytes);
-        memcpy(out_visibility, [buf_out_vis contents], float_bytes);
-        memcpy(out_irradiance, [buf_out_irr contents], float3_bytes);
+        memcpy(out_relit_srgb, [g_buffer_pool.buf_out_relit contents], float3_bytes);
+        memcpy(out_visibility, [g_buffer_pool.buf_out_vis contents], float_bytes);
+        memcpy(out_irradiance, [g_buffer_pool.buf_out_irr contents], float3_bytes);
 
         if (out_gpu_time_ms) {
             if (@available(macOS 10.15, *)) {
@@ -479,9 +637,47 @@ int metal2_render_frame(
     }
 }
 
+int metal2_get_buffer_pool_stats(uint32_t* out_alloc_count, uint32_t* out_steady_frames) {
+    if (out_alloc_count) *out_alloc_count = g_buffer_pool.alloc_count;
+    if (out_steady_frames) *out_steady_frames = g_buffer_pool.steady_frames;
+    return METAL_SUCCESS;
+}
+
+int metal2_reset_buffer_pool(void) {
+    g_buffer_pool.buf_depth = nil;
+    g_buffer_pool.buf_norm = nil;
+    g_buffer_pool.buf_img = nil;
+    g_buffer_pool.buf_fg = nil;
+    g_buffer_pool.buf_prot = nil;
+    g_buffer_pool.buf_out_relit = nil;
+    g_buffer_pool.buf_out_vis = nil;
+    g_buffer_pool.buf_out_irr = nil;
+    g_buffer_pool.buf_triangles = nil;
+    g_buffer_pool.num_triangles = 0;
+    g_buffer_pool.buf_stats4 = nil;
+    g_buffer_pool.buf_stats4_tmp = nil;
+    g_buffer_pool.buf_mean4 = nil;
+    g_buffer_pool.buf_ab = nil;
+    g_buffer_pool.buf_ab_tmp = nil;
+    g_buffer_pool.buf_mean_ab = nil;
+    g_buffer_pool.width = 0;
+    g_buffer_pool.height = 0;
+    g_buffer_pool.alloc_count = 0;
+    g_buffer_pool.steady_frames = 0;
+    return METAL_SUCCESS;
+}
+
 void metal2_shutdown() {
     @autoreleasepool {
+        metal2_reset_buffer_pool();
         g_render_pso = nil;
+        g_e1_init_pso = nil;
+        g_box_h4_pso = nil;
+        g_box_v4_pso = nil;
+        g_e1_ab_pso = nil;
+        g_box_h2_pso = nil;
+        g_box_v2_pso = nil;
+        g_e1_recon_pso = nil;
         g_vec_add_pso = nil;
         g_oklab_pso = nil;
         g_library = nil;
