@@ -1,9 +1,9 @@
 """
-RELIGHT STUDIO — RS-PRODUCT-1.0
+RELIGHT STUDIO — RS-PRODUCT-1.1
 ================================
 Studio Application Controller
 Authoritative application controller coordinating scene state, projects, selection,
-undo/redo history, 3D stage projection, gizmos, and asynchronous rendering.
+undo/redo history, 3D stage projection, 3D transform gizmos, and asynchronous rendering.
 """
 
 from __future__ import annotations
@@ -49,6 +49,9 @@ class StudioAppController:
 
         # Active selection (e.g. 'light_01', 'subject', 'camera', 'receiver', 'environment')
         self.selected_object_id: str = "light_01"
+
+        # Interaction state for dynamic preview quality
+        self.is_interacting: bool = False
 
         # Initialize default project
         img_path = sample_image_path or "demo_output/nike_sample.jpg"
@@ -303,6 +306,299 @@ class StudioAppController:
         self.state_manager.push_state(scene)
         self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
 
+    # -----------------------------------------------------------------------
+    # LIGHTING PRESETS
+    # -----------------------------------------------------------------------
+
+    def apply_lighting_preset(self, preset_name: str, light_id: Optional[str] = None) -> str:
+        """
+        Applies a verified studio lighting preset backed by real 3D coordinates,
+        orientations, dimensions, intensities, and Kelvin color temperatures.
+        """
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        light = scene.get_light(target_id)
+        if not light:
+            # Create a light if none selected
+            new_id = self.add_light()
+            light = scene.get_light(new_id)
+
+        p = preset_name.lower().replace("-", "_").replace(" ", "_")
+        if p == "key_softbox":
+            light.name = "Key Softbox"
+            light.position = [1.2, 1.8, 1.5]
+            light.rotation_deg = [-35.0, 30.0, 0.0]
+            light.width = 0.8
+            light.height = 0.8
+            light.intensity = 1.8
+            light.temperature_kelvin = 5600.0
+        elif p == "fill_softbox":
+            light.name = "Fill Softbox"
+            light.position = [-1.4, 1.4, 1.6]
+            light.rotation_deg = [-25.0, -30.0, 0.0]
+            light.width = 1.0
+            light.height = 1.0
+            light.intensity = 0.8
+            light.temperature_kelvin = 5200.0
+        elif p == "rim_strip":
+            light.name = "Rim Strip"
+            light.position = [-1.6, 1.5, -0.6]
+            light.rotation_deg = [-15.0, -120.0, 0.0]
+            light.width = 0.3
+            light.height = 1.4
+            light.intensity = 2.2
+            light.temperature_kelvin = 6500.0
+        elif p == "top_light":
+            light.name = "Top Softbox"
+            light.position = [0.0, 2.8, 0.0]
+            light.rotation_deg = [-90.0, 0.0, 0.0]
+            light.width = 1.2
+            light.height = 1.2
+            light.intensity = 1.8
+            light.temperature_kelvin = 5800.0
+        elif p == "side_light":
+            light.name = "Side Rake"
+            light.position = [2.2, 1.0, 0.2]
+            light.rotation_deg = [0.0, 85.0, 0.0]
+            light.width = 0.6
+            light.height = 1.2
+            light.intensity = 1.4
+            light.temperature_kelvin = 4500.0
+        else:
+            raise ValueError(f"Unknown preset '{preset_name}'")
+
+        light.enabled = True
+        light.cast_shadows = True
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+        return light.id
+
+    # -----------------------------------------------------------------------
+    # 3D GIZMO PROJECTION & INTERACTION
+    # -----------------------------------------------------------------------
+
+    def _get_stage_projector(self, width: int = 640, height: int = 480):
+        """Helper computing stage camera basis and perspective projection function."""
+        yaw = math.radians(self.stage_orbit_yaw_deg)
+        pitch = math.radians(self.stage_orbit_pitch_deg)
+        r = self.stage_orbit_dist
+
+        cam_tgt = np.array([self.stage_pan_offset[0], 0.35, self.stage_pan_offset[1]], dtype=np.float32)
+        cam_pos = cam_tgt + np.array([
+            r * math.cos(pitch) * math.sin(yaw),
+            r * math.sin(pitch),
+            r * math.cos(pitch) * math.cos(yaw)
+        ], dtype=np.float32)
+
+        fwd = cam_tgt - cam_pos
+        fwd /= np.linalg.norm(fwd)
+        up_tmp = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+        right = np.cross(fwd, up_tmp)
+        if np.linalg.norm(right) < 1e-4:
+            right = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        else:
+            right /= np.linalg.norm(right)
+        cam_up = np.cross(right, fwd)
+
+        fov = math.radians(45.0)
+        f_len = (height / 2.0) / math.tan(fov / 2.0)
+
+        def to_screen(pt3d: np.ndarray) -> Tuple[Tuple[int, int], bool]:
+            rel = pt3d - cam_pos
+            z_cam = float(np.dot(rel, fwd))
+            if z_cam <= 0.1:
+                return (0, 0), False
+            x_cam = float(np.dot(rel, right))
+            y_cam = float(np.dot(rel, cam_up))
+            sx = int(width / 2.0 + (x_cam / z_cam) * f_len)
+            sy = int(height / 2.0 - (y_cam / z_cam) * f_len)
+            return (sx, sy), (z_cam > 0.1)
+
+        return cam_pos, to_screen, right, cam_up, fwd, f_len
+
+    def get_stage_projection_meta(self, width: int = 640, height: int = 480) -> Dict[str, Any]:
+        """
+        Returns full screen coordinates for 3D picking, gizmo handles, and object hit-testing.
+        """
+        cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(width, height)
+        scene = self.current_scene
+
+        meta = {
+            "selected_id": self.selected_object_id,
+            "lights": [],
+            "gizmo": None,
+            "subject": None,
+            "camera": None
+        }
+
+        # Project lights
+        active_light = None
+        for l in scene.lights:
+            p_ctr, v_ctr = to_screen(np.array(l.position, dtype=np.float32))
+            l_obj = RectangularAreaLight(
+                position=l.position,
+                rotation_euler=l.rotation_deg,
+                width=l.width,
+                height=l.height
+            )
+            hw = l.width / 2.0
+            hh = l.height / 2.0
+            l_pos = np.array(l.position, dtype=np.float32)
+            corners_3d = [
+                l_pos + (-hw) * l_obj.u_tangent + (-hh) * l_obj.v_bitangent,
+                l_pos + ( hw) * l_obj.u_tangent + (-hh) * l_obj.v_bitangent,
+                l_pos + ( hw) * l_obj.u_tangent + ( hh) * l_obj.v_bitangent,
+                l_pos + (-hw) * l_obj.u_tangent + ( hh) * l_obj.v_bitangent
+            ]
+            corners_screen = [to_screen(pt)[0] for pt in corners_3d]
+            light_entry = {
+                "id": l.id,
+                "name": l.name,
+                "center": list(p_ctr),
+                "visible": v_ctr,
+                "corners": corners_screen
+            }
+            meta["lights"].append(light_entry)
+            if l.id == self.selected_object_id:
+                active_light = l
+
+        # Project 3D Gizmo for active light
+        if active_light:
+            g_pos = np.array(active_light.position, dtype=np.float32)
+            p_ctr, v_ctr = to_screen(g_pos)
+            if v_ctr:
+                axis_len = 0.50
+                p_x, _ = to_screen(g_pos + np.array([axis_len, 0.0, 0.0]))
+                p_y, _ = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
+                p_z, _ = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
+                
+                # Pitch ring handle
+                p_pitch, _ = to_screen(g_pos + np.array([0.0, axis_len * 0.7, axis_len * 0.7]))
+                # Yaw ring handle
+                p_yaw, _ = to_screen(g_pos + np.array([axis_len * 0.7, 0.0, axis_len * 0.7]))
+
+                meta["gizmo"] = {
+                    "light_id": active_light.id,
+                    "center": list(p_ctr),
+                    "axis_x": list(p_x),
+                    "axis_y": list(p_y),
+                    "axis_z": list(p_z),
+                    "rot_pitch": list(p_pitch),
+                    "rot_yaw": list(p_yaw)
+                }
+
+        # Project Subject
+        subj_pos = np.array(scene.subject.position, dtype=np.float32)
+        p_subj, v_subj = to_screen(subj_pos)
+        meta["subject"] = {
+            "center": list(p_subj),
+            "visible": v_subj
+        }
+
+        # Project Camera
+        p_cam, v_cam = to_screen(np.array(scene.camera.pos, dtype=np.float32))
+        meta["camera"] = {
+            "center": list(p_cam),
+            "visible": v_cam
+        }
+
+        return meta
+
+    def project_drag_to_3d(
+        self,
+        axis: str,
+        delta_screen_x: float,
+        delta_screen_y: float,
+        light_id: Optional[str] = None,
+        canvas_w: int = 640,
+        canvas_h: int = 480
+    ) -> None:
+        """
+        Projects screen pixel dragging along a 3D gizmo axis into true world-space displacement.
+        """
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        light = scene.get_light(target_id)
+        if not light:
+            return
+
+        cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(canvas_w, canvas_h)
+        p0 = np.array(light.position, dtype=np.float32)
+        s0, _ = to_screen(p0)
+
+        ax = axis.upper()
+        if ax in ("X", "Y", "Z"):
+            dir_map = {
+                "X": np.array([1.0, 0.0, 0.0], dtype=np.float32),
+                "Y": np.array([0.0, 1.0, 0.0], dtype=np.float32),
+                "Z": np.array([0.0, 0.0, 1.0], dtype=np.float32)
+            }
+            v_dir = dir_map[ax]
+            p1 = p0 + v_dir
+            s1, _ = to_screen(p1)
+
+            # Screen vector corresponding to 1 meter in 3D
+            sv = np.array([s1[0] - s0[0], s1[1] - s0[1]], dtype=np.float32)
+            length = np.linalg.norm(sv)
+            if length > 1e-3:
+                u_dir = sv / length
+                mouse_disp = np.array([delta_screen_x, delta_screen_y], dtype=np.float32)
+                # Projected distance in meters
+                dist_m = float(np.dot(mouse_disp, u_dir) / length)
+                
+                if ax == "X":
+                    light.position[0] = round(light.position[0] + dist_m, 3)
+                elif ax == "Y":
+                    light.position[1] = max(0.0, round(light.position[1] + dist_m, 3))
+                elif ax == "Z":
+                    light.position[2] = round(light.position[2] + dist_m, 3)
+
+        elif ax == "PITCH":
+            delta_pitch = -delta_screen_y * 0.5
+            light.rotation_deg[0] = max(-90.0, min(90.0, round(light.rotation_deg[0] + delta_pitch, 1)))
+
+        elif ax == "YAW":
+            delta_yaw = delta_screen_x * 0.5
+            light.rotation_deg[1] = round((light.rotation_deg[1] + delta_yaw) % 360.0, 1)
+            if light.rotation_deg[1] > 180.0:
+                light.rotation_deg[1] -= 360.0
+
+        elif ax == "WIDTH":
+            delta_w = delta_screen_x * 0.01
+            light.width = max(0.1, round(light.width + delta_w, 2))
+
+        elif ax == "HEIGHT":
+            delta_h = -delta_screen_y * 0.01
+            light.height = max(0.1, round(light.height + delta_h, 2))
+
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def focus_selected_object(self) -> None:
+        """Centers the 3D studio viewport camera on the selected object."""
+        scene = self.current_scene
+        sel_id = self.selected_object_id
+        light = scene.get_light(sel_id)
+        if light:
+            self.stage_pan_offset = [light.position[0], light.position[2]]
+            self.stage_orbit_dist = 3.2
+        elif sel_id == "subject":
+            self.stage_pan_offset = [0.0, 0.0]
+            self.stage_orbit_dist = 2.8
+        else:
+            self.stage_pan_offset = [0.0, 0.0]
+            self.stage_orbit_dist = 3.8
+
+    def reset_camera_stage(self) -> None:
+        """Resets the 3D studio viewport camera to the standard 3/4 perspective."""
+        self.stage_orbit_yaw_deg = 35.0
+        self.stage_orbit_pitch_deg = 25.0
+        self.stage_orbit_dist = 3.8
+        self.stage_pan_offset = [0.0, 0.0]
+
+    # -----------------------------------------------------------------------
+    # SUBJECT, RECEIVER, MATERIAL & ENVIRONMENT CONTROLS
+    # -----------------------------------------------------------------------
+
     def set_material_profile(self, profile_name: str) -> None:
         """Sets subject material from one of the canonical PBR profiles."""
         p_name = profile_name.lower().replace(" ", "_")
@@ -375,6 +671,29 @@ class StudioAppController:
         self.state_manager.push_state(scene)
         self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
 
+    def update_subject_proxy_params(
+        self,
+        proxy_type: Optional[str] = None,
+        dimensions: Optional[List[float]] = None,
+        position_y: Optional[float] = None
+    ) -> None:
+        """Updates subject proxy geometry type, dimensions, and ground elevation."""
+        scene = self.current_scene
+        if proxy_type is not None:
+            pt = str(proxy_type).upper().strip()
+            if pt in ("BOX", "CUBE"):
+                pt = "OBB"
+            elif pt in ("CYLINDER", "CAPSULE"):
+                pt = "SUPERQUADRIC"
+            scene.subject.proxy_type = ProxyType(pt)
+        if dimensions is not None:
+            scene.subject.dimensions = [float(d) for d in dimensions]
+        if position_y is not None:
+            scene.subject.position[1] = float(position_y)
+
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
     def update_receiver_params(
         self,
         receiver_type: str,
@@ -408,8 +727,19 @@ class StudioAppController:
             self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
 
     # -----------------------------------------------------------------------
-    # 3. RENDERING DISPATCH
+    # 3. RENDERING DISPATCH & DYNAMIC PROGRESSIVE QUALITY
     # -----------------------------------------------------------------------
+
+    def begin_interaction(self) -> None:
+        """Signals start of continuous drag gesture for responsive previewing."""
+        self.is_interacting = True
+
+    def end_interaction(self) -> None:
+        """Signals end of drag gesture: commits state snapshot and triggers progressive refinement."""
+        self.is_interacting = False
+        self.state_manager.push_state(self.current_scene)
+        # Settle render in progressive final quality
+        self.request_render(quality=RenderQuality.FINAL, async_mode=True)
 
     def request_render(self, quality: RenderQuality = RenderQuality.PREVIEW, async_mode: bool = True) -> Dict[str, Any]:
         """Dispatches a render pass using the authoritative scene state."""
@@ -442,7 +772,7 @@ class StudioAppController:
             return res
 
     # -----------------------------------------------------------------------
-    # 4. VIEWPORT DATA & 3D STAGE PROJECTION WITH INTERACTIVE GIZMO
+    # 4. VIEWPORT DATA & 3D STAGE PROJECTION
     # -----------------------------------------------------------------------
 
     def get_scene_hierarchy(self) -> Dict[str, Any]:
@@ -526,6 +856,7 @@ class StudioAppController:
                 "type": "subject",
                 "proxy_type": scene.subject.proxy_type.value,
                 "dimensions": scene.subject.dimensions,
+                "position_y": scene.subject.position[1],
                 "roughness": mat.roughness,
                 "metallic": mat.metallic,
                 "specular_f0": mat.specular_f0,
@@ -578,41 +909,7 @@ class StudioAppController:
         scene = self.current_scene
         canvas = np.full((height, width, 3), 24, dtype=np.uint8)
 
-        # Orbit camera math
-        yaw = math.radians(self.stage_orbit_yaw_deg)
-        pitch = math.radians(self.stage_orbit_pitch_deg)
-        r = self.stage_orbit_dist
-
-        cam_x = r * math.cos(pitch) * math.sin(yaw)
-        cam_y = r * math.sin(pitch)
-        cam_z = r * math.cos(pitch) * math.cos(yaw)
-
-        cam_pos = np.array([cam_x, cam_y, cam_z], dtype=np.float32)
-        cam_tgt = np.array([self.stage_pan_offset[0], 0.35, self.stage_pan_offset[1]], dtype=np.float32)
-
-        fwd = cam_tgt - cam_pos
-        fwd /= np.linalg.norm(fwd)
-        up_tmp = np.array([0.0, 1.0, 0.0], dtype=np.float32)
-        right = np.cross(fwd, up_tmp)
-        if np.linalg.norm(right) < 1e-4:
-            right = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-        else:
-            right /= np.linalg.norm(right)
-        cam_up = np.cross(right, fwd)
-
-        fov = math.radians(45.0)
-        f_len = (height / 2.0) / math.tan(fov / 2.0)
-
-        def to_screen(pt3d: np.ndarray) -> Tuple[Tuple[int, int], bool]:
-            rel = pt3d - cam_pos
-            z_cam = np.dot(rel, fwd)
-            if z_cam <= 0.1:
-                return (0, 0), False
-            x_cam = np.dot(rel, right)
-            y_cam = np.dot(rel, cam_up)
-            sx = int(width / 2.0 + (x_cam / z_cam) * f_len)
-            sy = int(height / 2.0 - (y_cam / z_cam) * f_len)
-            return (sx, sy), (0 <= sx < width and 0 <= sy < height)
+        cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(width, height)
 
         # 1. Metric Ground Grid (0.5m spacing)
         grid_range = 2.5
@@ -664,9 +961,11 @@ class StudioAppController:
             (4, 5), (5, 6), (6, 7), (7, 4),
             (0, 4), (1, 5), (2, 6), (3, 7)
         ]
+        is_subj_selected = (self.selected_object_id == "subject")
+        box_color = (0, 240, 255) if is_subj_selected else (200, 220, 0)
         for e1, e2 in edges:
             if box_vis[e1] and box_vis[e2]:
-                cv2.line(canvas, box_pts[e1], box_pts[e2], (200, 220, 0), 2, cv2.LINE_AA)
+                cv2.line(canvas, box_pts[e1], box_pts[e2], box_color, 2 if is_subj_selected else 1, cv2.LINE_AA)
 
         # 4. Photograph Camera Frustum (Yellow)
         c_pos = np.array(scene.camera.pos, dtype=np.float32)
@@ -734,26 +1033,26 @@ class StudioAppController:
             g_pos = np.array(active_light.position, dtype=np.float32)
             p_ctr, v_ctr = to_screen(g_pos)
             if v_ctr:
-                axis_len = 0.45
+                axis_len = 0.50
                 # X-axis (Red)
                 p_x, v_x = to_screen(g_pos + np.array([axis_len, 0.0, 0.0]))
                 if v_x:
                     cv2.line(canvas, p_ctr, p_x, (0, 0, 240), 3, cv2.LINE_AA)
-                    cv2.circle(canvas, p_x, 5, (0, 0, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, p_x, 6, (0, 0, 255), -1, cv2.LINE_AA)
                     cv2.putText(canvas, "X", (p_x[0] + 6, p_x[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 240), 1)
 
                 # Y-axis (Green)
                 p_y, v_y = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
                 if v_y:
                     cv2.line(canvas, p_ctr, p_y, (0, 220, 0), 3, cv2.LINE_AA)
-                    cv2.circle(canvas, p_y, 5, (0, 255, 0), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, p_y, 6, (0, 255, 0), -1, cv2.LINE_AA)
                     cv2.putText(canvas, "Y", (p_y[0] + 6, p_y[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 0), 1)
 
                 # Z-axis (Blue)
                 p_z, v_z = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
                 if v_z:
                     cv2.line(canvas, p_ctr, p_z, (240, 60, 0), 3, cv2.LINE_AA)
-                    cv2.circle(canvas, p_z, 5, (255, 80, 0), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, p_z, 6, (255, 80, 0), -1, cv2.LINE_AA)
                     cv2.putText(canvas, "Z", (p_z[0] + 6, p_z[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (240, 60, 0), 1)
 
                 # Center handle
@@ -761,7 +1060,7 @@ class StudioAppController:
 
         # Studio Stage HUD overlay
         cv2.putText(canvas, "3D VIRTUAL STUDIO STAGE", (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1)
-        cv2.putText(canvas, f"Orbit: Yaw {self.stage_orbit_yaw_deg:.0f} deg | Pitch {self.stage_orbit_pitch_deg:.0f} deg",
+        cv2.putText(canvas, f"Orbit: Yaw {self.stage_orbit_yaw_deg:.0f} deg | Pitch {self.stage_orbit_pitch_deg:.0f} deg | Dist {self.stage_orbit_dist:.1f}m",
                     (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (120, 120, 125), 1)
 
         return canvas

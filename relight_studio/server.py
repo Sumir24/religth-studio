@@ -102,6 +102,61 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
         _, buf = cv2.imencode(".png", cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
         return Response(content=buf.tobytes(), media_type="image/png")
 
+    @app.get("/api/stage/projection_meta")
+    async def get_stage_projection_meta(width: int = Query(640), height: int = Query(480)):
+        meta = ctrl.get_stage_projection_meta(width=width, height=height)
+        return meta
+
+    @app.post("/api/stage/drag")
+    async def stage_drag(payload: Dict[str, Any] = Body(...)):
+        axis = payload.get("axis", "X")
+        dx = float(payload.get("dx", 0.0))
+        dy = float(payload.get("dy", 0.0))
+        lid = payload.get("light_id")
+        w = int(payload.get("width", 640))
+        h = int(payload.get("height", 480))
+        ctrl.project_drag_to_3d(axis=axis, delta_screen_x=dx, delta_screen_y=dy, light_id=lid, canvas_w=w, canvas_h=h)
+        target = ctrl.current_scene.get_light(lid or ctrl.selected_object_id)
+        return {
+            "status": "ok",
+            "position": target.position if target else [],
+            "rotation_deg": target.rotation_deg if target else [],
+            "width": target.width if target else 0.0,
+            "height": target.height if target else 0.0
+        }
+
+    @app.post("/api/stage/focus")
+    async def stage_focus():
+        ctrl.focus_selected_object()
+        return {
+            "status": "ok",
+            "yaw": ctrl.stage_orbit_yaw_deg,
+            "pitch": ctrl.stage_orbit_pitch_deg,
+            "dist": ctrl.stage_orbit_dist,
+            "pan": ctrl.stage_pan_offset
+        }
+
+    @app.post("/api/stage/reset")
+    async def stage_reset():
+        ctrl.reset_camera_stage()
+        return {
+            "status": "ok",
+            "yaw": ctrl.stage_orbit_yaw_deg,
+            "pitch": ctrl.stage_orbit_pitch_deg,
+            "dist": ctrl.stage_orbit_dist,
+            "pan": ctrl.stage_pan_offset
+        }
+
+    @app.post("/api/interaction/begin")
+    async def interaction_begin():
+        ctrl.begin_interaction()
+        return {"status": "ok"}
+
+    @app.post("/api/interaction/end")
+    async def interaction_end():
+        ctrl.end_interaction()
+        return {"status": "ok"}
+
     # -----------------------------------------------------------------------
     # SELECTION & SCENE ACTIONS
     # -----------------------------------------------------------------------
@@ -156,11 +211,27 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
         )
         return {"status": "ok"}
 
+    @app.post("/api/light/preset")
+    async def apply_light_preset(payload: Dict[str, Any] = Body(...)):
+        preset = payload.get("preset", "key_softbox")
+        lid = payload.get("id")
+        created_id = ctrl.apply_lighting_preset(preset_name=preset, light_id=lid)
+        return {"status": "ok", "light_id": created_id}
+
     @app.post("/api/light/update")
     async def rename_light(payload: Dict[str, Any] = Body(...)):
         lid = payload.get("id", ctrl.selected_object_id)
         if "name" in payload:
             ctrl.rename_light(lid, payload["name"])
+        return {"status": "ok"}
+
+    @app.post("/api/subject/params")
+    async def update_subject_params(payload: Dict[str, Any] = Body(...)):
+        ctrl.update_subject_proxy_params(
+            proxy_type=payload.get("proxy_type"),
+            dimensions=payload.get("dimensions"),
+            position_y=payload.get("position_y")
+        )
         return {"status": "ok"}
 
     @app.post("/api/material/profile")
@@ -212,11 +283,15 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
     async def update_stage_orbit(
         yaw: Optional[float] = Query(None),
         pitch: Optional[float] = Query(None),
-        dist: Optional[float] = Query(None)
+        dist: Optional[float] = Query(None),
+        pan_x: Optional[float] = Query(None),
+        pan_y: Optional[float] = Query(None)
     ):
         if yaw is not None: ctrl.stage_orbit_yaw_deg = float(yaw)
         if pitch is not None: ctrl.stage_orbit_pitch_deg = float(pitch)
         if dist is not None: ctrl.stage_orbit_dist = float(dist)
+        if pan_x is not None: ctrl.stage_pan_offset[0] = float(pan_x)
+        if pan_y is not None: ctrl.stage_pan_offset[1] = float(pan_y)
         return {"status": "ok"}
 
     @app.post("/api/undo")
