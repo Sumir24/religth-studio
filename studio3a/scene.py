@@ -17,6 +17,8 @@ from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 
+from studio3a.material import MaterialData
+
 
 class ProxyType(str, Enum):
     OBB = "OBB"
@@ -57,7 +59,7 @@ def validate_finite_floats(obj: Any, path: str = "scene") -> None:
 class SceneMetadata:
     name: str = "Untitled Studio Scene"
     created_at: float = field(default_factory=time.time)
-    version: str = "3.1.0"
+    version: str = "3.2.0"
     author: str = "Relight Artist"
 
 
@@ -93,8 +95,10 @@ class SubjectProxyData:
     # Mesh filename or descriptor (if MESH)
     mesh_path: Optional[str] = None
     visible: bool = True
+    material: MaterialData = field(default_factory=MaterialData)
 
     def validate(self) -> None:
+        self.material.validate()
         for d in self.dimensions:
             if d <= 0.0:
                 raise ValueError(f"Proxy dimensions must be strictly positive: {self.dimensions}")
@@ -115,8 +119,18 @@ class ReceiverData:
     cove_radius: float = 0.40
     wall_z: float = -1.20
     visible: bool = True
+    material: MaterialData = field(
+        default_factory=lambda: MaterialData(
+            id="mat_receiver",
+            name="Cyclorama Matte",
+            roughness=0.90,
+            metallic=0.0,
+            specular_intensity=0.20
+        )
+    )
 
     def validate(self) -> None:
+        self.material.validate()
         if self.cove_radius <= 0.0:
             raise ValueError(f"Cyclorama cove radius must be strictly positive: {self.cove_radius}")
 
@@ -166,6 +180,8 @@ class RenderSettingsData:
     enable_hbao: bool = True
     ambient_fill: float = 0.15
     exposure: float = 1.0
+    enable_specular: bool = True
+    specular_only: bool = False
 
     def validate(self) -> None:
         if self.preview_samples < 1 or self.final_samples < 1:
@@ -183,10 +199,14 @@ class StudioScene:
     lights: List[AreaLightData] = field(default_factory=lambda: [AreaLightData()])
     render_settings: RenderSettingsData = field(default_factory=RenderSettingsData)
     active_light_id: Optional[str] = None
+    materials: List[MaterialData] = field(default_factory=lambda: [MaterialData()])
+    active_material_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.active_light_id is None and self.lights:
             self.active_light_id = self.lights[0].id
+        if self.active_material_id is None and self.materials:
+            self.active_material_id = self.materials[0].id
 
     def validate(self) -> None:
         """Validates all scene parameters against physical invariants."""
@@ -209,6 +229,18 @@ class StudioScene:
         # Validate active light selection
         if self.active_light_id is None or self.active_light_id not in light_ids:
             self.active_light_id = self.lights[0].id
+
+        # Validate materials
+        if not self.materials:
+            raise ValueError("StudioScene must contain at least one material.")
+        mat_ids = set()
+        for mat in self.materials:
+            mat.validate()
+            if mat.id in mat_ids:
+                raise ValueError(f"Duplicate material ID detected: '{mat.id}'")
+            mat_ids.add(mat.id)
+        if self.active_material_id is None or self.active_material_id not in mat_ids:
+            self.active_material_id = self.materials[0].id
 
         self.render_settings.validate()
         validate_finite_floats(asdict(self))
@@ -314,6 +346,50 @@ class StudioScene:
         lookup = {l.id: l for l in self.lights}
         self.lights = [lookup[lid] for lid in order_ids]
 
+    def get_material(self, mat_id: str) -> Optional[MaterialData]:
+        for m in self.materials:
+            if m.id == mat_id:
+                return m
+        return None
+
+    def get_active_material(self) -> MaterialData:
+        if self.active_material_id:
+            m = self.get_material(self.active_material_id)
+            if m is not None:
+                return m
+        self.active_material_id = self.materials[0].id
+        return self.materials[0]
+
+    def select_material(self, mat_id: str) -> bool:
+        if any(m.id == mat_id for m in self.materials):
+            self.active_material_id = mat_id
+            return True
+        return False
+
+    def add_material(self, mat: Optional[MaterialData] = None) -> MaterialData:
+        if mat is None:
+            idx = len(self.materials) + 1
+            mat = MaterialData(
+                id=f"mat_{idx}_{int(time.time()*1000)%10000}",
+                name=f"Studio Material {idx}"
+            )
+        base_id = mat.id
+        counter = 1
+        while any(m.id == mat.id for m in self.materials):
+            mat.id = f"{base_id}_{counter}"
+            counter += 1
+        self.materials.append(mat)
+        self.active_material_id = mat.id
+        return mat
+
+    def assign_material_to_subject(self, mat_id: str) -> bool:
+        m = self.get_material(mat_id)
+        if m is None:
+            raise ValueError(f"Material '{mat_id}' not found in scene.")
+        self.subject.material = copy.deepcopy(m)
+        self.active_material_id = mat_id
+        return True
+
     def to_dict(self) -> Dict[str, Any]:
         """Serializes scene to a JSON-compatible dictionary."""
         self.validate()
@@ -324,20 +400,34 @@ class StudioScene:
         """Deserializes scene from dictionary with backward compatibility and type safety."""
         d = copy.deepcopy(data)
         meta_raw = d.get("metadata", {})
-        # Schema migration check: upgrade older scenes to 3.1.0
+        # Schema migration check: upgrade older scenes to 3.2.0
         meta = SceneMetadata(**meta_raw)
-        meta.version = "3.1.0"
+        meta.version = "3.2.0"
         
         cam = CameraData(**d.get("camera", {}))
         
         subj_raw = d.get("subject", {})
         if "proxy_type" in subj_raw:
             subj_raw["proxy_type"] = ProxyType(subj_raw["proxy_type"])
+        if "material" in subj_raw:
+            subj_raw["material"] = MaterialData.from_dict(subj_raw["material"])
+        else:
+            subj_raw["material"] = MaterialData()
         subj = SubjectProxyData(**subj_raw)
         
         rec_raw = d.get("receiver", {})
         if "receiver_type" in rec_raw:
             rec_raw["receiver_type"] = ReceiverType(rec_raw["receiver_type"])
+        if "material" in rec_raw:
+            rec_raw["material"] = MaterialData.from_dict(rec_raw["material"])
+        else:
+            rec_raw["material"] = MaterialData(
+                id="mat_receiver",
+                name="Cyclorama Matte",
+                roughness=0.90,
+                metallic=0.0,
+                specular_intensity=0.20
+            )
         rec = ReceiverData(**rec_raw)
         
         lights = []
@@ -361,6 +451,16 @@ class StudioScene:
         active_lid = d.get("active_light_id")
         if not active_lid and lights:
             active_lid = lights[0].id
+
+        materials = []
+        for m_raw in d.get("materials", []):
+            materials.append(MaterialData.from_dict(m_raw))
+        if not materials:
+            materials = [copy.deepcopy(subj.material)]
+
+        active_mid = d.get("active_material_id")
+        if not active_mid and materials:
+            active_mid = materials[0].id
         
         scene = cls(
             metadata=meta,
@@ -369,7 +469,9 @@ class StudioScene:
             receiver=rec,
             lights=lights,
             render_settings=rnd,
-            active_light_id=active_lid
+            active_light_id=active_lid,
+            materials=materials,
+            active_material_id=active_mid
         )
         scene.validate()
         return scene

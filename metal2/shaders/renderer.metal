@@ -55,6 +55,70 @@ struct TriangleMesh {
     packed_float3 normal;
 };
 
+struct MaterialParams {
+    packed_float3 base_color;
+    float roughness;
+    float metallic;
+    float specular_f0;
+    float specular_intensity;
+    uint enable_specular;
+    uint specular_only;
+    float _pad[7];
+};
+
+// -----------------------------------------------------------------------------
+// 1.1 COOK-TORRANCE MICROFACET BRDF FUNCTIONS
+// -----------------------------------------------------------------------------
+
+inline float distribution_ggx(float n_dot_h, float alpha) {
+    float a2 = max(alpha * alpha, 0.0016f * 0.0016f);
+    float nh = clamp(n_dot_h, 0.0f, 1.0f);
+    float denom = nh * nh * (a2 - 1.0f) + 1.0f;
+    denom = max(denom, 1e-5f);
+    return a2 / (3.141592653589793f * denom * denom);
+}
+
+inline float visibility_smith_ggx_correlated(float n_dot_v, float n_dot_l, float alpha) {
+    float a2 = max(alpha * alpha, 0.0016f * 0.0016f);
+    float nv = clamp(n_dot_v, 0.0f, 1.0f);
+    float nl = clamp(n_dot_l, 0.0f, 1.0f);
+    float lambda_v = nl * sqrt(nv * nv * (1.0f - a2) + a2);
+    float lambda_l = nv * sqrt(nl * nl * (1.0f - a2) + a2);
+    float denom = lambda_v + lambda_l;
+    denom = max(denom, 1e-5f);
+    return 0.5f / denom;
+}
+
+inline float3 fresnel_schlick(float v_dot_h, float3 f0) {
+    float vh = clamp(v_dot_h, 0.0f, 1.0f);
+    float term = pow(max(1.0f - vh, 0.0f), 5.0f);
+    return f0 + (float3(1.0f) - f0) * term;
+}
+
+inline float3 cook_torrance_specular(
+    float3 n, float3 l, float3 v,
+    float roughness, float3 f0
+) {
+    float r = clamp(roughness, 0.04f, 1.0f);
+    float alpha = r * r;
+    float n_dot_l = dot(n, l);
+    float n_dot_v = dot(n, v);
+    if (n_dot_l <= 0.0f || n_dot_v <= 0.0f) return float3(0.0f);
+
+    float3 h = l + v;
+    float h_len = max(length(h), 1e-7f);
+    h /= h_len;
+
+    float n_dot_h = dot(n, h);
+    float v_dot_h = dot(v, h);
+
+    float D = distribution_ggx(n_dot_h, alpha);
+    float V = visibility_smith_ggx_correlated(n_dot_v, n_dot_l, alpha);
+    float3 F = fresnel_schlick(v_dot_h, f0);
+
+    return D * V * F;
+}
+
 // -----------------------------------------------------------------------------
 // 2. MATRIX & VECTOR HELPERS
 // -----------------------------------------------------------------------------
@@ -430,6 +494,8 @@ kernel void render_hybrid_studio_kernel(
     device packed_float3* out_irradiance      [[buffer(12)]],
     constant uint& has_protected_mask         [[buffer(13)]],
     constant uint& num_lights                 [[buffer(14)]],
+    constant MaterialParams& material         [[buffer(15)]],
+    device packed_float3* out_specular        [[buffer(16)]],
     uint2 pixel_coord                         [[thread_position_in_grid]]
 ) {
     if (pixel_coord.x >= cam.width || pixel_coord.y >= cam.height) return;
@@ -485,13 +551,33 @@ kernel void render_hybrid_studio_kernel(
     if (is_sky) {
         out_visibility[idx] = 1.0f;
         out_irradiance[idx] = packed_float3(0.0f, 0.0f, 0.0f);
+        out_specular[idx] = packed_float3(0.0f, 0.0f, 0.0f);
         out_relit_srgb[idx] = image_orig_srgb[idx];
         return;
     }
 
-    // 3. Multi-Light Stratified Area Light Direct Illumination & Additive Shadow Transport
+    // 3. Multi-Light Stratified Area Light Direct Illumination & Specular Transport
     float3 total_unshadowed_irr = float3(0.0f);
     float3 total_illuminated_irr = float3(0.0f);
+    float3 total_illuminated_spec = float3(0.0f);
+
+    float3 v_dir = normalize(c_pos - surface_pos);
+
+    // Surface Material Properties
+    float3 f0_val;
+    float cur_roughness;
+    float kd_val;
+
+    if (is_fg) {
+        float3 base = float3(material.base_color);
+        f0_val = mix(float3(material.specular_f0 * material.specular_intensity), base, material.metallic);
+        cur_roughness = material.roughness;
+        kd_val = 1.0f - material.metallic;
+    } else {
+        f0_val = float3(0.04f * 0.20f);
+        cur_roughness = 0.90f;
+        kd_val = 1.0f;
+    }
 
     float3 p_bias = surface_pos + 1e-3f * surface_norm;
 
@@ -516,6 +602,7 @@ kernel void render_hybrid_studio_kernel(
         if (grid_dim < 1) grid_dim = 1;
 
         float3 irr_acc_li = float3(0.0f);
+        float3 spec_acc_li = float3(0.0f);
         float vis_acc_li = 0.0f;
 
         for (uint sy = 0; sy < grid_dim; ++sy) {
@@ -563,13 +650,21 @@ kernel void render_hybrid_studio_kernel(
                 }
 
                 float geom_factor = (cos_surf * cos_light) / dist_sq;
-                irr_acc_li += emitter_radiance * (geom_factor * (area / float(grid_dim * grid_dim)));
+                irr_acc_li += emitter_radiance * (geom_factor * (area / float(grid_dim * grid_dim))) * kd_val;
+
+                if (material.enable_specular != 0) {
+                    float3 f_spec = cook_torrance_specular(surface_norm, L_dir, v_dir, cur_roughness, f0_val);
+                    spec_acc_li += emitter_radiance * f_spec * (geom_factor * (area / float(grid_dim * grid_dim)));
+                }
             }
         }
 
         float vis_li = vis_acc_li / float(grid_dim * grid_dim);
         total_unshadowed_irr += irr_acc_li;
         total_illuminated_irr += irr_acc_li * vis_li;
+        if (material.enable_specular != 0) {
+            total_illuminated_spec += spec_acc_li * vis_li;
+        }
     }
 
     // 4. Contact Occlusion on Receiver
@@ -615,6 +710,7 @@ kernel void render_hybrid_studio_kernel(
     }
 
     out_irradiance[idx] = packed_float3(total_unshadowed_irr.x, total_unshadowed_irr.y, total_unshadowed_irr.z);
+    out_specular[idx] = packed_float3(total_illuminated_spec.x, total_illuminated_spec.y, total_illuminated_spec.z);
 
     float unshadowed_luma = 0.2126f * total_unshadowed_irr.x + 0.7152f * total_unshadowed_irr.y + 0.0722f * total_unshadowed_irr.z;
     float illuminated_luma = 0.2126f * total_illuminated_irr.x + 0.7152f * total_illuminated_irr.y + 0.0722f * total_illuminated_irr.z;
@@ -871,6 +967,9 @@ kernel void e1_reconstruct_c3_kernel(
     constant uint& has_protected_mask           [[buffer(4)]],
     constant uint& width                        [[buffer(5)]],
     constant uint& height                       [[buffer(6)]],
+    device const packed_float3* specular_radiance [[buffer(7)]],
+    constant uint& enable_specular              [[buffer(8)]],
+    constant uint& specular_only                [[buffer(9)]],
     uint2 coord                                 [[thread_position_in_grid]]
 ) {
     if (coord.x >= width || coord.y >= height) return;
@@ -878,6 +977,14 @@ kernel void e1_reconstruct_c3_kernel(
 
     if (has_protected_mask != 0 && protected_mask[idx] != 0) {
         out_relit_srgb[idx] = image_orig_srgb[idx];
+        return;
+    }
+
+    float3 spec_lin = (enable_specular != 0 && specular_radiance != nullptr) ? float3(specular_radiance[idx]) : float3(0.0f);
+
+    if (specular_only != 0) {
+        float3 spec_srgb = linear_to_srgb_exact(clamp(spec_lin, 0.0f, 1.0f));
+        out_relit_srgb[idx] = packed_float3(spec_srgb.x, spec_srgb.y, spec_srgb.z);
         return;
     }
 
@@ -889,20 +996,20 @@ kernel void e1_reconstruct_c3_kernel(
     float rho_bar = ab.x * Y_orig + ab.y;
     float Y_relit = max(1e-4f, Y_orig * exp(rho_bar));
 
-    // C3 Oklab Constant-Hue Gamut Mapping
+    // Two-Scale Energy Decomposition: Add specular in linear radiant space
     float scale = Y_relit / max(Y_orig, 1e-6f);
-    float3 ref_rgb = lin_orig * scale;
+    float3 ref_rgb = lin_orig * scale + spec_lin;
     float3 lab_ref = linear_srgb_to_oklab(max(ref_rgb, 0.0f));
     float3 lab_orig = linear_srgb_to_oklab(max(lin_orig, 0.0f));
 
     float L_target = lab_ref.x;
     float L_disp = (L_target <= 0.90f) ? max(1e-4f, L_target) : (0.90f + 0.10f * tanh((L_target - 0.90f) / 0.10f));
 
-    float a_orig = lab_orig.y;
-    float b_orig = lab_orig.z;
-    float chroma = sqrt(a_orig * a_orig + b_orig * b_orig);
-    float a_init = (chroma < 1e-4f) ? 0.0f : a_orig;
-    float b_init = (chroma < 1e-4f) ? 0.0f : b_orig;
+    float a_ref = lab_ref.y;
+    float b_ref = lab_ref.z;
+    float chroma = sqrt(a_ref * a_ref + b_ref * b_ref);
+    float a_init = (chroma < 1e-4f) ? 0.0f : a_ref;
+    float b_init = (chroma < 1e-4f) ? 0.0f : b_ref;
 
     float3 test_rgb = oklab_to_linear_srgb(float3(L_disp, a_init, b_init));
     float3 final_lin;

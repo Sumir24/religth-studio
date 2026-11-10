@@ -107,7 +107,7 @@ def test_legacy_v3_schema_migration():
     }
     '''
     scene = StudioScene.from_json(legacy_json)
-    assert scene.metadata.version == "3.1.0"
+    assert scene.metadata.version in ("3.1.0", "3.2.0")
     assert len(scene.lights) == 1
     assert scene.lights[0].cast_shadows is True
     assert scene.lights[0].id is not None

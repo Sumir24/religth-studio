@@ -95,6 +95,7 @@ def color_reconstruct_C3(
     image_lin: np.ndarray,
     Y_orig: np.ndarray,
     Y_relit: np.ndarray,
+    specular_lin: Optional[np.ndarray] = None,
     n_bisection_steps: int = 8
 ) -> np.ndarray:
     """
@@ -103,6 +104,9 @@ def color_reconstruct_C3(
     """
     scale = (Y_relit / np.maximum(Y_orig, 1e-6))[..., None]
     ref_rgb = image_lin * scale
+    if specular_lin is not None:
+        ref_rgb = ref_rgb + np.maximum(0.0, specular_lin)
+
     oklab_ref = rgb_to_oklab(ref_rgb)
     oklab_orig = rgb_to_oklab(image_lin)
 
@@ -110,12 +114,17 @@ def color_reconstruct_C3(
     L_disp = np.where(L_target <= 0.90, np.maximum(1e-4, L_target),
                       0.90 + 0.10 * np.tanh((L_target - 0.90) / 0.10))
 
-    a_orig = oklab_orig[..., 1]
-    b_orig = oklab_orig[..., 2]
-    chroma_orig = np.sqrt(a_orig**2 + b_orig**2)
-    neutral_mask = chroma_orig < 1e-4
-    a_init = np.where(neutral_mask, 0.0, a_orig)
-    b_init = np.where(neutral_mask, 0.0, b_orig)
+    if specular_lin is not None:
+        a_src = oklab_ref[..., 1]
+        b_src = oklab_ref[..., 2]
+    else:
+        a_src = oklab_orig[..., 1]
+        b_src = oklab_orig[..., 2]
+
+    chroma_src = np.sqrt(a_src**2 + b_src**2)
+    neutral_mask = chroma_src < 1e-4
+    a_init = np.where(neutral_mask, 0.0, a_src)
+    b_init = np.where(neutral_mask, 0.0, b_src)
 
     test_oklab = np.stack([L_disp, a_init, b_init], axis=-1)
     raw_rgb = oklab_to_rgb(test_oklab)
@@ -158,7 +167,9 @@ class ReconstructionEngine:
         direct_irradiance: np.ndarray,
         direct_visibility: Optional[np.ndarray] = None,
         ambient_fill: float = 0.15,
-        protected_mask: Optional[np.ndarray] = None
+        protected_mask: Optional[np.ndarray] = None,
+        specular_radiance: Optional[np.ndarray] = None,
+        specular_only: bool = False
     ) -> dict[str, np.ndarray]:
         """
         Executes end-to-end reconstruction from original photograph.
@@ -168,11 +179,28 @@ class ReconstructionEngine:
             direct_visibility: Optional (H, W) geometric shadow visibility in [0, 1].
             ambient_fill: Ambient indirect light baseline fraction.
             protected_mask: (H, W) boolean mask of regions that must NEVER be modified.
+            specular_radiance: Optional (H, W, 3) linear specular radiance contribution.
+            specular_only: If True, outputs specular contribution only for visual inspection.
         Returns:
             Dictionary with relit_srgb, relit_linear, shading_ratio, and diagnostics.
         """
         image_lin = srgb_to_linear(image_orig_srgb)
         Y_orig = linear_to_luminance(image_lin)
+
+        # Specular-only visualization mode
+        if specular_only and specular_radiance is not None:
+            spec_lin = np.clip(specular_radiance, 0.0, None)
+            if protected_mask is not None:
+                spec_lin = np.where(protected_mask[..., None], 0.0, spec_lin)
+            spec_srgb = linear_to_srgb(spec_lin)
+            return {
+                "relit_srgb": spec_srgb,
+                "relit_linear": spec_lin,
+                "Y_orig": Y_orig,
+                "Y_relit": linear_to_luminance(spec_lin),
+                "R_eff": np.ones_like(Y_orig),
+                "err_rgb": np.zeros_like(image_orig_srgb)
+            }
         
         # 1. Base / Detail Luminance Decomposition
         logY = np.log(np.maximum(Y_orig, 1e-4))
@@ -209,8 +237,10 @@ class ReconstructionEngine:
         Y_relit = np.exp(B + rho_bar + D)
         Y_relit = np.maximum(1e-4, Y_relit).astype(np.float32)
         
-        # 4. C3 Oklab Constant-Hue Gamut Mapping
-        relit_rgb_lin = color_reconstruct_C3(image_lin, Y_orig, Y_relit, n_bisection_steps=8)
+        # 4. C3 Oklab Constant-Hue Gamut Mapping with Two-Scale Specular Injection
+        relit_rgb_lin = color_reconstruct_C3(
+            image_lin, Y_orig, Y_relit, specular_lin=specular_radiance, n_bisection_steps=8
+        )
         
         # Protect original image if protected_mask specified
         if protected_mask is not None:

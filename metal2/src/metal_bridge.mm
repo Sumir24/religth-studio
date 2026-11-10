@@ -30,6 +30,7 @@ struct PersistentBufferPool {
     id<MTLBuffer> buf_out_relit = nil;
     id<MTLBuffer> buf_out_vis = nil;
     id<MTLBuffer> buf_out_irr = nil;
+    id<MTLBuffer> buf_out_spec = nil;
     
     id<MTLBuffer> buf_triangles = nil;
     uint32_t num_triangles = 0;
@@ -350,6 +351,7 @@ int metal2_render_frame(
     const CReceiverParams* receiver,
     const CLightParams* lights,
     uint32_t num_lights,
+    const CMaterialParams* material,
     const CTriangleMesh* triangles,
     uint32_t num_triangles,
     const float* depth_map,
@@ -360,6 +362,7 @@ int metal2_render_frame(
     float* out_relit_srgb,
     float* out_visibility,
     float* out_irradiance,
+    float* out_specular,
     float* out_gpu_time_ms
 ) {
     if (!cam || !proxy || !receiver || !lights || num_lights == 0 || !depth_map || !normals_map ||
@@ -454,6 +457,7 @@ int metal2_render_frame(
             g_buffer_pool.buf_out_relit = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
             g_buffer_pool.buf_out_vis = [g_device newBufferWithLength:float_bytes options:MTLResourceStorageModeShared];
             g_buffer_pool.buf_out_irr = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
+            g_buffer_pool.buf_out_spec = [g_device newBufferWithLength:float3_bytes options:MTLResourceStorageModeShared];
 
             // E.1 Intermediate Buffers
             g_buffer_pool.buf_stats4 = [g_device newBufferWithLength:float4_bytes options:MTLResourceStorageModeShared];
@@ -472,6 +476,7 @@ int metal2_render_frame(
 
         if (!g_buffer_pool.buf_depth || !g_buffer_pool.buf_norm || !g_buffer_pool.buf_img ||
             !g_buffer_pool.buf_out_relit || !g_buffer_pool.buf_out_vis || !g_buffer_pool.buf_out_irr ||
+            !g_buffer_pool.buf_out_spec ||
             !g_buffer_pool.buf_stats4 || !g_buffer_pool.buf_mean4 || !g_buffer_pool.buf_mean_ab) {
             return METAL_ERROR_BUFFER_ALLOCATION;
         }
@@ -507,6 +512,17 @@ int metal2_render_frame(
         MTLSize threadsPerGroup = MTLSizeMake(16, 16, 1);
         MTLSize numGroups = MTLSizeMake((W + 15) / 16, (H + 15) / 16, 1);
 
+        CMaterialParams default_mat;
+        memset(&default_mat, 0, sizeof(CMaterialParams));
+        default_mat.base_color[0] = 0.8f; default_mat.base_color[1] = 0.8f; default_mat.base_color[2] = 0.8f;
+        default_mat.roughness = 0.5f;
+        default_mat.metallic = 0.0f;
+        default_mat.specular_f0 = 0.04f;
+        default_mat.specular_intensity = 1.0f;
+        default_mat.enable_specular = 1;
+        default_mat.specular_only = 0;
+        const CMaterialParams* mat_ptr = material ? material : &default_mat;
+
         // --- PASS 1: Direct 3D Lighting & Shadows ---
         [encoder setComputePipelineState:g_render_pso];
         [encoder setBytes:cam length:sizeof(CCameraParams) atIndex:0];
@@ -528,6 +544,8 @@ int metal2_render_frame(
         [encoder setBuffer:g_buffer_pool.buf_out_irr offset:0 atIndex:12];
         [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:13];
         [encoder setBytes:&num_lights length:sizeof(uint32_t) atIndex:14];
+        [encoder setBytes:mat_ptr length:sizeof(CMaterialParams) atIndex:15];
+        [encoder setBuffer:g_buffer_pool.buf_out_spec offset:0 atIndex:16];
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
 
         // --- PASS 2: E.1 Guidance & Target Shading Ratio Initialization ---
@@ -593,6 +611,9 @@ int metal2_render_frame(
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
 
         // --- PASS 8: Final E.1 Reconstruction with C3 Oklab Constant-Hue Gamut Mapping ---
+        uint32_t en_spec = mat_ptr->enable_specular;
+        uint32_t spec_only = mat_ptr->specular_only;
+
         [encoder setComputePipelineState:g_e1_recon_pso];
         [encoder setBuffer:g_buffer_pool.buf_img offset:0 atIndex:0];
         [encoder setBuffer:g_buffer_pool.buf_mean_ab offset:0 atIndex:1];
@@ -601,6 +622,9 @@ int metal2_render_frame(
         [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:4];
         [encoder setBytes:&W length:sizeof(uint32_t) atIndex:5];
         [encoder setBytes:&H length:sizeof(uint32_t) atIndex:6];
+        [encoder setBuffer:g_buffer_pool.buf_out_spec offset:0 atIndex:7];
+        [encoder setBytes:&en_spec length:sizeof(uint32_t) atIndex:8];
+        [encoder setBytes:&spec_only length:sizeof(uint32_t) atIndex:9];
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
 
         [encoder endEncoding];
@@ -620,6 +644,9 @@ int metal2_render_frame(
         memcpy(out_relit_srgb, [g_buffer_pool.buf_out_relit contents], float3_bytes);
         memcpy(out_visibility, [g_buffer_pool.buf_out_vis contents], float_bytes);
         memcpy(out_irradiance, [g_buffer_pool.buf_out_irr contents], float3_bytes);
+        if (out_specular) {
+            memcpy(out_specular, [g_buffer_pool.buf_out_spec contents], float3_bytes);
+        }
 
         if (out_gpu_time_ms) {
             if (@available(macOS 10.15, *)) {
@@ -654,6 +681,7 @@ int metal2_reset_buffer_pool(void) {
     g_buffer_pool.buf_out_relit = nil;
     g_buffer_pool.buf_out_vis = nil;
     g_buffer_pool.buf_out_irr = nil;
+    g_buffer_pool.buf_out_spec = nil;
     g_buffer_pool.buf_triangles = nil;
     g_buffer_pool.num_triangles = 0;
     g_buffer_pool.buf_stats4 = nil;

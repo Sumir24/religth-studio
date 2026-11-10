@@ -100,6 +100,17 @@ typedef struct {
 } CReceiverParams;
 
 typedef struct {
+    float base_color[3];
+    float roughness;
+    float metallic;
+    float specular_f0;
+    float specular_intensity;
+    uint32_t enable_specular;
+    uint32_t specular_only;
+    float _pad[7];
+} CMaterialParams;
+
+typedef struct {
     float v0[3];
     float v1[3];
     float v2[3];
@@ -112,6 +123,7 @@ int metal2_render_frame(
     const CReceiverParams* receiver,
     const CLightParams* lights,
     uint32_t num_lights,
+    const CMaterialParams* material,
     const CTriangleMesh* triangles,
     uint32_t num_triangles,
     const float* depth_map,
@@ -122,6 +134,7 @@ int metal2_render_frame(
     float* out_relit_srgb,
     float* out_visibility,
     float* out_irradiance,
+    float* out_specular,
     float* out_gpu_time_ms
 );
 

@@ -1,0 +1,185 @@
+[
+  {
+    "case_id": "P1_nike_sneaker",
+    "resolution": "576x1024",
+    "profiles": [
+      {
+        "profile": "Fabric",
+        "roughness": 0.85,
+        "metallic": 0.0,
+        "fg_dci": 0.9888,
+        "whole_dci": 0.988,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0009,
+        "mean_specular_radiance": 0.0002,
+        "gpu_time_ms": 72.04
+      },
+      {
+        "profile": "Marble",
+        "roughness": 0.35,
+        "metallic": 0.0,
+        "fg_dci": 0.9869,
+        "whole_dci": 0.9871,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.005,
+        "mean_specular_radiance": 0.0002,
+        "gpu_time_ms": 61.86
+      },
+      {
+        "profile": "Plastic",
+        "roughness": 0.22,
+        "metallic": 0.0,
+        "fg_dci": 0.9892,
+        "whole_dci": 0.9884,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0029,
+        "mean_specular_radiance": 0.0,
+        "gpu_time_ms": 63.62
+      },
+      {
+        "profile": "Rough_Metal",
+        "roughness": 0.45,
+        "metallic": 1.0,
+        "fg_dci": 0.7899,
+        "whole_dci": 0.8825,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0906,
+        "mean_specular_radiance": 0.0068,
+        "gpu_time_ms": 63.71
+      },
+      {
+        "profile": "Polished_Metal",
+        "roughness": 0.08,
+        "metallic": 1.0,
+        "fg_dci": 0.9894,
+        "whole_dci": 0.9909,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0025,
+        "mean_specular_radiance": 0.0,
+        "gpu_time_ms": 62.12
+      }
+    ]
+  },
+  {
+    "case_id": "P2_classical_statue",
+    "resolution": "576x1024",
+    "profiles": [
+      {
+        "profile": "Fabric",
+        "roughness": 0.85,
+        "metallic": 0.0,
+        "fg_dci": 0.9761,
+        "whole_dci": 0.9792,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0025,
+        "mean_specular_radiance": 0.0002,
+        "gpu_time_ms": 22.29
+      },
+      {
+        "profile": "Marble",
+        "roughness": 0.35,
+        "metallic": 0.0,
+        "fg_dci": 0.9761,
+        "whole_dci": 0.9792,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0807,
+        "mean_specular_radiance": 0.0005,
+        "gpu_time_ms": 22.53
+      },
+      {
+        "profile": "Plastic",
+        "roughness": 0.22,
+        "metallic": 0.0,
+        "fg_dci": 0.9761,
+        "whole_dci": 0.9792,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.1296,
+        "mean_specular_radiance": 0.0004,
+        "gpu_time_ms": 22.13
+      },
+      {
+        "profile": "Rough_Metal",
+        "roughness": 0.45,
+        "metallic": 1.0,
+        "fg_dci": 0.9724,
+        "whole_dci": 0.9759,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 1.0045,
+        "mean_specular_radiance": 0.011,
+        "gpu_time_ms": 23.8
+      },
+      {
+        "profile": "Polished_Metal",
+        "roughness": 0.08,
+        "metallic": 1.0,
+        "fg_dci": 0.972,
+        "whole_dci": 0.9756,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 36.6066,
+        "mean_specular_radiance": 0.0069,
+        "gpu_time_ms": 25.1
+      }
+    ]
+  },
+  {
+    "case_id": "P3_architectural_relief",
+    "resolution": "768x512",
+    "profiles": [
+      {
+        "profile": "Fabric",
+        "roughness": 0.85,
+        "metallic": 0.0,
+        "fg_dci": 0.9994,
+        "whole_dci": 0.9963,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0014,
+        "mean_specular_radiance": 0.0001,
+        "gpu_time_ms": 2.48
+      },
+      {
+        "profile": "Marble",
+        "roughness": 0.35,
+        "metallic": 0.0,
+        "fg_dci": 0.9994,
+        "whole_dci": 0.9963,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.0099,
+        "mean_specular_radiance": 0.0,
+        "gpu_time_ms": 3.03
+      },
+      {
+        "profile": "Plastic",
+        "roughness": 0.22,
+        "metallic": 0.0,
+        "fg_dci": 0.9994,
+        "whole_dci": 0.9963,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.028,
+        "mean_specular_radiance": 0.0,
+        "gpu_time_ms": 3.6
+      },
+      {
+        "profile": "Rough_Metal",
+        "roughness": 0.45,
+        "metallic": 1.0,
+        "fg_dci": 0.9975,
+        "whole_dci": 0.9955,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 0.1003,
+        "mean_specular_radiance": 0.0012,
+        "gpu_time_ms": 4.94
+      },
+      {
+        "profile": "Polished_Metal",
+        "roughness": 0.08,
+        "metallic": 1.0,
+        "fg_dci": 0.9994,
+        "whole_dci": 0.9963,
+        "protected_error_max": 0.0,
+        "peak_specular_radiance": 1.9151,
+        "mean_specular_radiance": 0.0,
+        "gpu_time_ms": 6.15
+      }
+    ]
+  }
+]

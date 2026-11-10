@@ -23,7 +23,7 @@ from studio3a.geometry import LowPolyMesh, euler_to_rotation_matrix
 from studio3a.lighting import kelvin_to_linear_rgb, RectangularAreaLight
 from metal2.bridge import (
     Metal2Bridge, CCameraParams, CProxyParams, CReceiverParams,
-    CLightParams, CTriangleMesh
+    CLightParams, CTriangleMesh, CMaterialParams
 )
 
 
@@ -201,8 +201,31 @@ class MetalRenderBackend:
             if light_data.enabled:
                 num_active_lights += 1
 
-        # 5. Execute on Metal GPU
-        out_relit, out_vis, out_irr, gpu_time_ms = self.bridge.render_frame(
+        # 5. Pack Material Parameters
+        c_mat = CMaterialParams()
+        subj_mat = getattr(subj, "material", None)
+        if subj_mat is not None:
+            c_mat.base_color[0] = float(subj_mat.base_color[0])
+            c_mat.base_color[1] = float(subj_mat.base_color[1])
+            c_mat.base_color[2] = float(subj_mat.base_color[2])
+            c_mat.roughness = float(subj_mat.roughness)
+            c_mat.metallic = float(subj_mat.metallic)
+            c_mat.specular_f0 = float(subj_mat.specular_f0)
+            c_mat.specular_intensity = float(subj_mat.specular_intensity)
+        else:
+            c_mat.base_color[0] = 0.8
+            c_mat.base_color[1] = 0.8
+            c_mat.base_color[2] = 0.8
+            c_mat.roughness = 0.5
+            c_mat.metallic = 0.0
+            c_mat.specular_f0 = 0.04
+            c_mat.specular_intensity = 1.0
+
+        c_mat.enable_specular = 1 if getattr(scene.render_settings, "enable_specular", True) else 0
+        c_mat.specular_only = 1 if getattr(scene.render_settings, "specular_only", False) else 0
+
+        # 6. Execute on Metal GPU
+        out_relit, out_vis, out_irr, out_spec, gpu_time_ms = self.bridge.render_frame(
             cam_params=c_cam,
             proxy_params=c_proxy,
             rec_params=c_rec,
@@ -212,7 +235,8 @@ class MetalRenderBackend:
             normals_map=normals_map,
             fg_mask=fg_mask,
             protected_mask=protected_mask,
-            image_orig_srgb=image_orig_srgb
+            image_orig_srgb=image_orig_srgb,
+            material_params=c_mat
         )
 
         total_wall_ms = (time.time() - t0) * 1000.0
@@ -241,6 +265,7 @@ class MetalRenderBackend:
             "direct_visibility": out_vis,
             "contact_occlusion": np.ones_like(out_vis),
             "direct_irradiance": out_irr,
+            "specular_radiance": out_spec,
             "shading_ratio": np.ones_like(out_vis),
             "proxy_overlay": proxy_overlay,
             "diagnostics": self._last_diagnostics

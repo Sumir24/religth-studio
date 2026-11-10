@@ -144,6 +144,7 @@ class RenderBackend:
             height=H
         )
         ray_o, ray_d = cam.generate_camera_rays()
+        fg_mask = (fg_mask > 0).astype(bool)
 
         # 2. Instantiate Analytical 3D Proxy & Receiver
         proxy = self.instantiate_proxy_geometry(scene)
@@ -193,12 +194,37 @@ class RenderBackend:
         )
 
         # 5. Multi-Light Direct Additive Irradiance & Shadow Transport
+        cam_pos = np.array(scene.camera.pos, dtype=np.float32)
+        v_diff = cam_pos - surface_pos
+        v_dist = np.linalg.norm(v_diff, axis=-1, keepdims=True)
+        view_dir_per_pixel = np.where(v_dist > 1e-4, v_diff / np.maximum(v_dist, 1e-4), np.array([0.0, 0.0, 1.0], dtype=np.float32))
+
+        mat_subj = getattr(scene.subject, "material", None)
+        if mat_subj is None:
+            from studio3a.material import MaterialData
+            mat_subj = MaterialData()
+
+        mat_rec = getattr(scene.receiver, "material", None)
+        if mat_rec is None:
+            from studio3a.material import MaterialData
+            mat_rec = MaterialData(id="mat_receiver", name="Cyclorama Matte", roughness=0.90, metallic=0.0, specular_intensity=0.20)
+
+        f0_subj = mat_subj.get_effective_f0()
+        f0_rec = mat_rec.get_effective_f0()
+        kd_subj = 1.0 - mat_subj.metallic
+        kd_rec = 1.0 - mat_rec.metallic
+        kd_map = np.full((H, W, 1), kd_rec, dtype=np.float32)
+        kd_map[fg_mask] = kd_subj
+
         total_unshadowed_irradiance = np.zeros((H, W, 3), dtype=np.float32)
         total_illuminated_irradiance = np.zeros((H, W, 3), dtype=np.float32)
+        total_specular_radiance = np.zeros((H, W, 3), dtype=np.float32)
         active_surface_mask = fg_mask | is_receiver
         num_active_lights = 0
         
         t_light_start = time.time()
+        enable_spec = getattr(scene.render_settings, "enable_specular", True)
+
         for l_idx, light_data in enumerate(scene.lights):
             if not light_data.enabled:
                 continue
@@ -224,7 +250,34 @@ class RenderBackend:
                 seed=42 + l_idx * 17
             )
             irr_i[is_sky] = 0.0
+            # Scale diffuse irradiance by (1 - metallic)
+            irr_i *= kd_map
             total_unshadowed_irradiance += irr_i
+
+            # Specular radiance from rectangular area light
+            if enable_spec:
+                spec_subj = light.evaluate_specular_radiance(
+                    surface_pos=surface_pos,
+                    surface_norm=surface_norm,
+                    view_dir=view_dir_per_pixel,
+                    roughness=mat_subj.roughness,
+                    f0=f0_subj,
+                    n_samples=n_samples,
+                    seed=42 + l_idx * 17
+                )
+                spec_rec = light.evaluate_specular_radiance(
+                    surface_pos=surface_pos,
+                    surface_norm=surface_norm,
+                    view_dir=view_dir_per_pixel,
+                    roughness=mat_rec.roughness,
+                    f0=f0_rec,
+                    n_samples=n_samples,
+                    seed=42 + l_idx * 17
+                )
+                spec_i = np.where(fg_mask[..., None], spec_subj, spec_rec)
+                spec_i[is_sky] = 0.0
+            else:
+                spec_i = np.zeros((H, W, 3), dtype=np.float32)
             
             # Geometric Direct Visibility for this specific light
             if scene.render_settings.enable_cast_shadows and getattr(light_data, "cast_shadows", True):
@@ -240,8 +293,10 @@ class RenderBackend:
             else:
                 vis_i = np.ones((H, W), dtype=np.float32)
             
-            # Additive illumination: each light's visibility modulates only its own irradiance
+            # Additive illumination: each light's visibility modulates only its own irradiance and specular
             total_illuminated_irradiance += irr_i * vis_i[..., None]
+            if enable_spec:
+                total_specular_radiance += spec_i * vis_i[..., None]
                 
         # 6. Contact Grounding Term
         if scene.render_settings.enable_contact_grounding:
@@ -268,13 +323,15 @@ class RenderBackend:
 
         t_shadow_ms = (time.time() - t_light_start) * 1000.0
 
-        # 7. Non-Destructive Image Reconstruction (Single Unified E.1 + C3 pass)
+        # 7. Non-Destructive Image Reconstruction (Single Unified E.1 + C3 pass with Two-Scale Specular)
         t_recon_start = time.time()
         recon_res = self._recon_engine.reconstruct_relit_image(
             image_orig_srgb=image_orig_srgb,
             direct_irradiance=total_illuminated_irradiance * scene.render_settings.exposure,
             direct_visibility=None,  # Illumination and contact occlusion are fully integrated into direct_irradiance
-            ambient_fill=scene.render_settings.ambient_fill
+            ambient_fill=scene.render_settings.ambient_fill,
+            specular_radiance=total_specular_radiance * scene.render_settings.exposure if enable_spec else None,
+            specular_only=getattr(scene.render_settings, "specular_only", False)
         )
         t_recon_ms = (time.time() - t_recon_start) * 1000.0
         
@@ -307,6 +364,7 @@ class RenderBackend:
             "contact_occlusion": c_contact,
             "direct_irradiance": total_unshadowed_irradiance,
             "illuminated_irradiance": total_illuminated_irradiance,
+            "specular_radiance": total_specular_radiance,
             "shading_ratio": recon_res["R_eff"],
             "err_rgb": recon_res["err_rgb"],
             "proxy_overlay": proxy_overlay,

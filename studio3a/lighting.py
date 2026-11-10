@@ -15,6 +15,7 @@ import numpy as np
 
 from studio3a.geometry import euler_to_rotation_matrix
 from studio3a.scene import EnergyConvention
+from studio3a.brdf import cook_torrance_specular_brdf
 
 
 def kelvin_to_linear_rgb(temp_k: float) -> np.ndarray:
@@ -179,3 +180,67 @@ class RectangularAreaLight:
             irr_acc += L_e[None, :] * (G[:, None] * dA)
             
         return irr_acc.reshape(shape + (3,))
+
+    def evaluate_specular_radiance(
+        self,
+        surface_pos: np.ndarray,
+        surface_norm: np.ndarray,
+        view_dir: np.ndarray,
+        roughness: float,
+        f0: Union[float, np.ndarray],
+        n_samples: int = 16,
+        seed: Optional[int] = 42
+    ) -> np.ndarray:
+        """
+        Evaluates unshadowed direct specular radiance at surface positions.
+        Args:
+            surface_pos: (..., 3) array of surface hit positions.
+            surface_norm: (..., 3) array of surface hit normals.
+            view_dir: (..., 3) unit view vectors pointing from surface to camera.
+            roughness: Microfacet roughness parameter in [0, 1].
+            f0: Normal-incidence specular reflectance (float or (3,) array).
+        Returns:
+            specular_radiance: (..., 3) linear RGB specular radiance.
+        """
+        if not self.enabled:
+            return np.zeros(surface_pos.shape[:-1] + (3,), dtype=np.float32)
+
+        emitter_pts = self.sample_emitter_points(n_samples=n_samples, seed=seed)
+        L_e = self.get_emitted_radiance()
+        dA = self.area / float(len(emitter_pts))
+
+        shape = surface_pos.shape[:-1]
+        p_flat = surface_pos.reshape(-1, 3)
+        n_flat = surface_norm.reshape(-1, 3)
+        if view_dir.ndim == 1:
+            v_flat = np.broadcast_to(view_dir, p_flat.shape)
+        else:
+            v_flat = view_dir.reshape(-1, 3)
+
+        spec_acc = np.zeros((len(p_flat), 3), dtype=np.float32)
+
+        for p_emitter in emitter_pts:
+            L_vec = p_emitter[None, :] - p_flat
+            dist_sq = np.sum(L_vec * L_vec, axis=-1)
+            dist = np.sqrt(np.maximum(dist_sq, 1e-6))
+            L_dir = L_vec / dist[:, None]
+
+            cos_emitter = np.maximum(0.0, -np.sum(L_dir * self.normal[None, :], axis=-1))
+            cos_surface = np.maximum(0.0, np.sum(L_dir * n_flat, axis=-1))
+
+            valid = (cos_emitter > 0.0) & (cos_surface > 0.0)
+            if not np.any(valid):
+                continue
+
+            d_omega = (cos_emitter * dA) / np.maximum(dist_sq, 1e-4)
+
+            f_spec = cook_torrance_specular_brdf(
+                n_flat, L_dir, v_flat, roughness, f0
+            )
+            if f_spec.ndim == 1:
+                f_spec = f_spec[:, None]
+
+            radiance_term = L_e[None, :] * f_spec * (cos_surface[:, None] * d_omega[:, None])
+            spec_acc += np.where(valid[:, None], radiance_term, 0.0)
+
+        return spec_acc.reshape(shape + (3,))

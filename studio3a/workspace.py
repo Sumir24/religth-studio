@@ -425,6 +425,72 @@ class StudioWorkspaceSession:
         self.state_manager.push_state(scene)
         return self.execute_render(quality=RenderQuality.PREVIEW)
 
+    def set_material_profile(self, profile_name: str) -> Dict[str, Any]:
+        """Artist manipulation action: sets material to one of the 5 canonical PBR profiles."""
+        from studio3a.material import MaterialData
+        p_name = profile_name.lower().replace(" ", "_")
+        if p_name == "fabric":
+            mat = MaterialData.fabric()
+        elif p_name == "marble":
+            mat = MaterialData.marble()
+        elif p_name == "plastic":
+            mat = MaterialData.plastic()
+        elif p_name in ("rough_metal", "rough metal"):
+            mat = MaterialData.rough_metal()
+        elif p_name in ("polished_metal", "polished metal"):
+            mat = MaterialData.polished_metal()
+        else:
+            mat = MaterialData()
+
+        scene = self.state_manager.current_scene
+        scene.subject.material = mat
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def update_material_params(
+        self,
+        roughness: float,
+        metallic: float,
+        specular_f0: float = 0.04,
+        specular_intensity: float = 1.0,
+        base_color: Optional[List[float]] = None
+    ) -> Dict[str, Any]:
+        """Artist manipulation action: updates microfacet BRDF parameters with undo support."""
+        scene = self.state_manager.current_scene
+        mat = scene.subject.material
+        mat.roughness = max(0.0, min(1.0, float(roughness)))
+        mat.metallic = max(0.0, min(1.0, float(metallic)))
+        mat.specular_f0 = max(0.0, min(1.0, float(specular_f0)))
+        mat.specular_intensity = max(0.0, float(specular_intensity))
+        if base_color is not None:
+            mat.base_color = [float(c) for c in base_color]
+        mat.validate()
+
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def toggle_specular(self, enable_specular: Optional[bool] = None) -> Dict[str, Any]:
+        """Toggles specular transport calculation."""
+        scene = self.state_manager.current_scene
+        if enable_specular is not None:
+            scene.render_settings.enable_specular = bool(enable_specular)
+        else:
+            scene.render_settings.enable_specular = not scene.render_settings.enable_specular
+
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def toggle_specular_only(self, specular_only: Optional[bool] = None) -> Dict[str, Any]:
+        """Toggles specular highlight isolation viewport diagnostic mode."""
+        scene = self.state_manager.current_scene
+        if specular_only is not None:
+            scene.render_settings.specular_only = bool(specular_only)
+        else:
+            scene.render_settings.specular_only = not getattr(scene.render_settings, "specular_only", False)
+
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
     def undo_action(self) -> Dict[str, Any]:
         """Reverts last artist modification."""
         self.state_manager.undo()
@@ -470,7 +536,7 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
             with gr.Column(scale=5):
                 gr.Subheader("1. Photograph Viewport")
                 viewport_mode = gr.Radio(
-                    choices=["Relit Output", "Side-by-Side Split", "Proxy Wireframe Overlay", "Direct Visibility Heatmap", "Original Photograph"],
+                    choices=["Relit Output", "Side-by-Side Split", "Specular Highlight Only", "Proxy Wireframe Overlay", "Direct Visibility Heatmap", "Original Photograph"],
                     value="Relit Output",
                     label="Viewport Display Mode"
                 )
@@ -514,7 +580,21 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
                 receiver_type = gr.Dropdown(choices=["CYCLORAMA", "PLANE"], value="CYCLORAMA", label="Receiver Geometry")
 
             with gr.Column(scale=1):
-                gr.Subheader("5. Scene State & Engine Backend")
+                gr.Subheader("5. Material & Microfacet BRDF Inspector")
+                mat_profile = gr.Dropdown(
+                    choices=["Custom", "Fabric", "Marble", "Plastic", "Rough Metal", "Polished Metal"],
+                    value="Custom",
+                    label="PBR Material Profile"
+                )
+                mat_roughness = gr.Slider(0.04, 1.0, value=0.50, step=0.02, label="Roughness")
+                mat_metallic = gr.Slider(0.0, 1.0, value=0.0, step=0.05, label="Metallic")
+                mat_f0 = gr.Slider(0.0, 0.20, value=0.04, step=0.01, label="Specular F0 (Dielectric)")
+                mat_intensity = gr.Slider(0.0, 3.0, value=1.0, step=0.1, label="Specular Intensity")
+                chk_enable_spec = gr.Checkbox(value=True, label="Enable Specular Reflection")
+                chk_spec_only = gr.Checkbox(value=False, label="Specular Isolation Only")
+
+            with gr.Column(scale=1):
+                gr.Subheader("6. Scene State & Engine Backend")
                 backend_choice = gr.Radio(
                     choices=["Metal GPU (Apple Silicon)", "CPU Reference Renderer"],
                     value="Metal GPU (Apple Silicon)" if sess.use_metal else "CPU Reference Renderer",
@@ -533,6 +613,9 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
                 disp = (light_res["relit_srgb"] * 255).astype(np.uint8)
             elif mode == "Side-by-Side Split":
                 disp = (light_res["split_comparison_srgb"] * 255).astype(np.uint8)
+            elif mode == "Specular Highlight Only":
+                spec = light_res.get("specular_radiance", np.zeros_like(light_res["relit_srgb"]))
+                disp = (np.clip(spec, 0.0, 1.0) * 255).astype(np.uint8)
             elif mode == "Proxy Wireframe Overlay":
                 disp = (light_res["proxy_overlay"] * 255).astype(np.uint8)
             elif mode == "Direct Visibility Heatmap":
@@ -573,6 +656,40 @@ def build_gradio_workspace(session: Optional[StudioWorkspaceSession] = None):
             return update_ui("Relit Output", res)
             
         receiver_type.change(on_receiver_change, inputs=[receiver_type], outputs=[photo_display, stage_display, diag_box])
+
+        def on_profile_change(prof):
+            if prof != "Custom":
+                res = sess.set_material_profile(prof)
+                subj_mat = sess.state_manager.current_scene.subject.material
+                disp, stage, diag = update_ui("Relit Output", res)
+                return disp, stage, diag, subj_mat.roughness, subj_mat.metallic, subj_mat.specular_f0, subj_mat.specular_intensity
+            return update_ui("Relit Output") + (gr.skip(), gr.skip(), gr.skip(), gr.skip())
+
+        mat_profile.change(
+            on_profile_change,
+            inputs=[mat_profile],
+            outputs=[photo_display, stage_display, diag_box, mat_roughness, mat_metallic, mat_f0, mat_intensity]
+        )
+
+        mat_inputs = [mat_roughness, mat_metallic, mat_f0, mat_intensity]
+        def on_mat_change(r, m, f0, inten):
+            res = sess.update_material_params(roughness=r, metallic=m, specular_f0=f0, specular_intensity=inten)
+            return update_ui("Relit Output", res)
+
+        for ctrl in mat_inputs:
+            ctrl.change(on_mat_change, inputs=mat_inputs, outputs=[photo_display, stage_display, diag_box])
+
+        chk_enable_spec.change(
+            lambda en: update_ui("Relit Output", sess.toggle_specular(en)),
+            inputs=[chk_enable_spec],
+            outputs=[photo_display, stage_display, diag_box]
+        )
+
+        chk_spec_only.change(
+            lambda so: update_ui("Relit Output", sess.toggle_specular_only(so)),
+            inputs=[chk_spec_only],
+            outputs=[photo_display, stage_display, diag_box]
+        )
 
         def on_backend_change(b_val):
             use_m = "Metal" in b_val

@@ -89,6 +89,19 @@ class CTriangleMesh(Structure):
     ]
 
 
+class CMaterialParams(Structure):
+    _fields_ = [
+        ("base_color", c_float * 3),
+        ("roughness", c_float),
+        ("metallic", c_float),
+        ("specular_f0", c_float),
+        ("specular_intensity", c_float),
+        ("enable_specular", c_uint32),
+        ("specular_only", c_uint32),
+        ("_pad", c_float * 7),
+    ]
+
+
 class Metal2Bridge:
     _instance: Optional[Metal2Bridge] = None
 
@@ -128,12 +141,14 @@ class Metal2Bridge:
             POINTER(CReceiverParams),
             POINTER(CLightParams),
             c_uint32,
+            POINTER(CMaterialParams),
             POINTER(CTriangleMesh),
             c_uint32,
             POINTER(c_float),
             POINTER(c_float),
             POINTER(c_uint8),
             POINTER(c_uint8),
+            POINTER(c_float),
             POINTER(c_float),
             POINTER(c_float),
             POINTER(c_float),
@@ -247,12 +262,13 @@ class Metal2Bridge:
         normals_map: np.ndarray,
         fg_mask: Optional[np.ndarray],
         protected_mask: Optional[np.ndarray],
-        image_orig_srgb: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        image_orig_srgb: np.ndarray,
+        material_params: Optional[CMaterialParams] = None
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
         """
         Executes full 3D rendering pass on Metal GPU.
         Accepts either a single CLightParams or a list of CLightParams.
-        Returns: (relit_srgb, visibility, irradiance, gpu_time_ms)
+        Returns: (relit_srgb, visibility, irradiance, specular_radiance, gpu_time_ms)
         """
         H, W = image_orig_srgb.shape[:2]
         assert depth_map.shape == (H, W)
@@ -270,6 +286,7 @@ class Metal2Bridge:
         out_relit = np.empty((H, W, 3), dtype=np.float32)
         out_vis = np.empty((H, W), dtype=np.float32)
         out_irr = np.empty((H, W, 3), dtype=np.float32)
+        out_spec = np.empty((H, W, 3), dtype=np.float32)
         gpu_time = c_float(0.0)
 
         # Ensure C-contiguous
@@ -303,6 +320,9 @@ class Metal2Bridge:
         out_relit_ptr = out_relit.ctypes.data_as(POINTER(c_float))
         out_vis_ptr = out_vis.ctypes.data_as(POINTER(c_float))
         out_irr_ptr = out_irr.ctypes.data_as(POINTER(c_float))
+        out_spec_ptr = out_spec.ctypes.data_as(POINTER(c_float))
+
+        mat_ptr = ctypes.byref(material_params) if material_params is not None else None
 
         status = self.lib.metal2_render_frame(
             ctypes.byref(cam_params),
@@ -310,6 +330,7 @@ class Metal2Bridge:
             ctypes.byref(rec_params),
             lights_arr,
             c_uint32(num_lights),
+            mat_ptr,
             tri_ptr,
             c_uint32(num_tri),
             depth_ptr,
@@ -320,13 +341,14 @@ class Metal2Bridge:
             out_relit_ptr,
             out_vis_ptr,
             out_irr_ptr,
+            out_spec_ptr,
             ctypes.byref(gpu_time)
         )
 
         if status != 0:
             raise RuntimeError(f"metal2_render_frame failed on Metal GPU (code: {status})")
 
-        return out_relit, out_vis, out_irr, float(gpu_time.value)
+        return out_relit, out_vis, out_irr, out_spec, float(gpu_time.value)
 
     def get_buffer_pool_stats(self) -> Dict[str, int]:
         """Returns statistics from the persistent UMA buffer pool."""
