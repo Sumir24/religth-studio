@@ -65,11 +65,14 @@ def run_brdf_mathematical_audit():
 
     print(f"\n  Monotonicity Assessment:")
     print(f"    Pure Math Reference: Strictly Monotonic = {monotonic_ref}")
-    print(f"    Production BRDF ([0.04, 1.00]): Strictly Monotonic = {monotonic_prod_full} (VIOLATION)")
+    print(f"    Production BRDF ([0.04, 1.00]): Strictly Monotonic = {monotonic_prod_full} ({'PASS' if monotonic_prod_full else 'VIOLATION'})")
     print(f"    Production BRDF ([0.0562, 1.00]): Strictly Monotonic = {monotonic_prod_above_threshold} (PASS)")
-    print(f"  [DISCREPANCY IDENTIFIED]: For roughness r < 0.0562, alpha^2 < 1e-5.")
-    print(f"    In distribution_ggx, denom is clamped to EPSILON_DOT (1e-5), which truncates and inverts")
-    print(f"    the peak NDF between r=0.04 and r=0.0562.")
+    if not monotonic_prod_full:
+        print(f"  [DISCREPANCY IDENTIFIED]: For roughness r < 0.0562, alpha^2 < 1e-5.")
+        print(f"    In distribution_ggx, denom is clamped to EPSILON_DOT (1e-5), which truncates and inverts")
+        print(f"    the peak NDF between r=0.04 and r=0.0562.")
+    else:
+        print(f"  [REMEDIATION VERIFIED]: Monotonicity holds strictly across [0.04, 1.00]. Denominator safeguard verified.")
 
     # 2. Fresnel Schlick Limits
     print("\n--- 2. Fresnel Schlick Limits ---")

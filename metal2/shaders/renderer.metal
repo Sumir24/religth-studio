@@ -73,8 +73,9 @@ struct MaterialParams {
 inline float distribution_ggx(float n_dot_h, float alpha) {
     float a2 = max(alpha * alpha, 0.0016f * 0.0016f);
     float nh = clamp(n_dot_h, 0.0f, 1.0f);
-    float denom = nh * nh * (a2 - 1.0f) + 1.0f;
-    denom = max(denom, 1e-5f);
+    float nh2 = nh * nh;
+    float denom = (1.0f - nh2) + a2 * nh2;
+    denom = max(denom, a2);
     return a2 / (3.141592653589793f * denom * denom);
 }
 

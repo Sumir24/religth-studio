@@ -12,7 +12,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0009,
         "mean_specular_radiance": 0.0002,
-        "gpu_time_ms": 72.04
+        "gpu_time_ms": 73.85
       },
       {
         "profile": "Marble",
@@ -23,7 +23,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.005,
         "mean_specular_radiance": 0.0002,
-        "gpu_time_ms": 61.86
+        "gpu_time_ms": 62.54
       },
       {
         "profile": "Plastic",
@@ -34,7 +34,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0029,
         "mean_specular_radiance": 0.0,
-        "gpu_time_ms": 63.62
+        "gpu_time_ms": 64.78
       },
       {
         "profile": "Rough_Metal",
@@ -45,7 +45,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0906,
         "mean_specular_radiance": 0.0068,
-        "gpu_time_ms": 63.71
+        "gpu_time_ms": 60.67
       },
       {
         "profile": "Polished_Metal",
@@ -56,7 +56,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0025,
         "mean_specular_radiance": 0.0,
-        "gpu_time_ms": 62.12
+        "gpu_time_ms": 60.49
       }
     ]
   },
@@ -73,7 +73,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0025,
         "mean_specular_radiance": 0.0002,
-        "gpu_time_ms": 22.29
+        "gpu_time_ms": 21.59
       },
       {
         "profile": "Marble",
@@ -84,7 +84,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0807,
         "mean_specular_radiance": 0.0005,
-        "gpu_time_ms": 22.53
+        "gpu_time_ms": 21.59
       },
       {
         "profile": "Plastic",
@@ -95,7 +95,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.1296,
         "mean_specular_radiance": 0.0004,
-        "gpu_time_ms": 22.13
+        "gpu_time_ms": 22.24
       },
       {
         "profile": "Rough_Metal",
@@ -106,7 +106,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 1.0045,
         "mean_specular_radiance": 0.011,
-        "gpu_time_ms": 23.8
+        "gpu_time_ms": 22.11
       },
       {
         "profile": "Polished_Metal",
@@ -115,9 +115,9 @@
         "fg_dci": 0.972,
         "whole_dci": 0.9756,
         "protected_error_max": 0.0,
-        "peak_specular_radiance": 36.6066,
+        "peak_specular_radiance": 36.59,
         "mean_specular_radiance": 0.0069,
-        "gpu_time_ms": 25.1
+        "gpu_time_ms": 24.17
       }
     ]
   },
@@ -134,7 +134,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0014,
         "mean_specular_radiance": 0.0001,
-        "gpu_time_ms": 2.48
+        "gpu_time_ms": 2.67
       },
       {
         "profile": "Marble",
@@ -145,7 +145,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.0099,
         "mean_specular_radiance": 0.0,
-        "gpu_time_ms": 3.03
+        "gpu_time_ms": 3.28
       },
       {
         "profile": "Plastic",
@@ -156,7 +156,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.028,
         "mean_specular_radiance": 0.0,
-        "gpu_time_ms": 3.6
+        "gpu_time_ms": 4.03
       },
       {
         "profile": "Rough_Metal",
@@ -167,7 +167,7 @@
         "protected_error_max": 0.0,
         "peak_specular_radiance": 0.1003,
         "mean_specular_radiance": 0.0012,
-        "gpu_time_ms": 4.94
+        "gpu_time_ms": 6.43
       },
       {
         "profile": "Polished_Metal",
@@ -176,9 +176,9 @@
         "fg_dci": 0.9994,
         "whole_dci": 0.9963,
         "protected_error_max": 0.0,
-        "peak_specular_radiance": 1.9151,
+        "peak_specular_radiance": 1.9145,
         "mean_specular_radiance": 0.0,
-        "gpu_time_ms": 6.15
+        "gpu_time_ms": 12.36
       }
     ]
   }

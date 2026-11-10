@@ -59,8 +59,9 @@ def distribution_ggx(n_dot_h: np.ndarray, alpha: float) -> np.ndarray:
     """
     a2 = max(alpha * alpha, MIN_ALPHA * MIN_ALPHA)
     nh = clamp_dot(n_dot_h)
-    denom = (nh * nh * (a2 - 1.0) + 1.0)
-    denom = np.maximum(denom, EPSILON_DOT)
+    nh2 = nh * nh
+    denom = (1.0 - nh2) + a2 * nh2
+    denom = np.maximum(denom, a2)
     return a2 / (np.pi * denom * denom)
 
 

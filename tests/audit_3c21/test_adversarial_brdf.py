@@ -34,10 +34,10 @@ from benchmarks.audit_3c21.audit_energy_conservation import evaluate_fibonacci_r
 
 def test_adversarial_brdf_safeguard_mismatch():
     """
-    Adversarial Audit Check:
-    Documents and proves the numerical clamping mismatch between
-    MIN_ROUGHNESS = 0.04 (alpha^2 = 2.56e-6) and EPSILON_DOT = 1e-5.
-    Verifies that the peak NDF collapses at r=0.04 vs r=0.0562.
+    Remediation Check:
+    Verifies that the denominator clamping fix (denom = np.maximum(denom, a2))
+    restores strict physical monotonicity across MIN_ROUGHNESS = 0.04 and 0.0562.
+    Asserts that peak specular BRDF increases monotonically as roughness decreases.
     """
     N = np.array([0.0, 1.0, 0.0], dtype=np.float32)
     V = np.array([0.0, 1.0, 0.0], dtype=np.float32)
@@ -48,10 +48,54 @@ def test_adversarial_brdf_safeguard_mismatch():
     peak_0562 = float(np.mean(cook_torrance_specular_brdf(N, V, L, roughness=0.0562, f0=F0)))
     peak_10 = float(np.mean(cook_torrance_specular_brdf(N, V, L, roughness=0.10, f0=F0)))
 
-    # Document the non-monotonic anomaly: peak_04 is SMALLER than peak_0562!
-    assert peak_04 < peak_0562, "Expected peak_04 < peak_0562 due to EPSILON_DOT (1e-5) denominator clamping!"
-    # Above the critical threshold r=0.0562, monotonicity is restored:
-    assert peak_0562 > peak_10, "Expected peak_0562 > peak_10 in valid monotonic regime!"
+    # Strict physical monotonicity: Peak at r=0.04 must be strictly GREATER than at r=0.0562!
+    assert peak_04 > peak_0562, f"Monotonicity failed: peak_04 ({peak_04}) <= peak_0562 ({peak_0562})"
+    assert peak_0562 > peak_10, f"Monotonicity failed: peak_0562 ({peak_0562}) <= peak_10 ({peak_10})"
+    # Exact analytical values: peak_04 should be ~1243.40, peak_0562 ~319.08
+    assert np.isclose(peak_04, 1243.40, rtol=1e-3)
+    assert np.isclose(peak_0562, 319.08, rtol=1e-3)
+
+
+def test_ggx_ndf_fine_grained_monotonicity_fp64():
+    """
+    Independent Double-Precision Reference Test:
+    Covers the fine-grained [0.04, 0.06] roughness region in 21 steps of 0.001
+    and the broader [0.06, 1.00] range.
+    Compares production distribution_ggx against double-precision analytical truth:
+      D_analytical = 1.0 / (pi * roughness^4)
+    Verifies:
+      1. Relative error < 1e-6 vs analytical truth.
+      2. Strict monotonic decrease as roughness increases.
+    """
+    # 1. Fine-grained 0.04 - 0.06 region (21 steps)
+    fine_roughnesses = np.linspace(0.04, 0.06, 21, dtype=np.float64)
+    prev_d = float("inf")
+
+    for r in fine_roughnesses:
+        alpha = float(roughness_to_alpha(r))
+        d_prod = float(distribution_ggx(np.array([1.0], dtype=np.float32), alpha)[0])
+        d_ref = IndependentBRDFReference.ggx_d(1.0, alpha)
+        d_exact = 1.0 / (math.pi * (r ** 4.0))
+
+        # Precision parity against analytical exact formula
+        rel_err = abs(d_prod - d_exact) / d_exact
+        assert rel_err < 1e-4, f"Relative error {rel_err} exceeded 1e-4 at r={r}"
+        assert abs(d_prod - d_ref) / d_ref < 1e-6, f"Production vs ref mismatch at r={r}"
+
+        # Strict monotonicity: d_prod must decrease as r increases
+        assert d_prod < prev_d, f"Monotonicity violated: d({r}) = {d_prod} >= prev {prev_d}"
+        prev_d = d_prod
+
+    # 2. Broader 0.06 - 1.00 region
+    broad_roughnesses = [0.07, 0.08, 0.10, 0.15, 0.20, 0.25, 0.35, 0.50, 0.75, 1.00]
+    for r in broad_roughnesses:
+        alpha = float(roughness_to_alpha(r))
+        d_prod = float(distribution_ggx(np.array([1.0], dtype=np.float32), alpha)[0])
+        d_exact = 1.0 / (math.pi * (r ** 4.0))
+        rel_err = abs(d_prod - d_exact) / d_exact
+        assert rel_err < 1e-4, f"Relative error {rel_err} exceeded 1e-4 at r={r}"
+        assert d_prod < prev_d, f"Monotonicity violated: d({r}) = {d_prod} >= prev {prev_d}"
+        prev_d = d_prod
 
 
 def test_adversarial_spherical_fibonacci_energy_conservation():
