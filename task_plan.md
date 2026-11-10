@@ -1,90 +1,86 @@
-# RS-PRODUCT-1.0 Task Plan: Artist-Controlled Virtual Lighting Studio
+# RS-PRODUCT-1.1 Task Plan: Interactive Scene, Real-Time Lighting & Photographic Control
 
-**Role:** Principal macOS Application Architect, Staff Rendering Engineer, Senior Interaction Designer, Metal Engineer, Product Designer, Technical Project Lead  
+**Role:** Principal macOS Application Architect, Senior 3D Interaction Engineer, Metal Rendering Engineer, Computational Photography Specialist, Product Designer, Independent QA Lead  
 **Product:** Relight Studio  
-**Primary Milestone:** RS-PRODUCT-1.0 — Studio Workspace  
-**Baseline Checkpoint:** `9ad1118` (RS-SPIKE-3C.3 completed)  
-**Branch:** `feature/RS-PRODUCT-1.0-studio-workspace`  
-**Platform:** macOS / Apple Silicon  
-**Execution Standard:** Evidence-first engineering. Ground truth verification. Real application architecture with zero mock data. Professional studio UI with non-destructive guarantees.
+**Milestone:** RS-PRODUCT-1.1  
+**Baseline Checkpoint:** `27a38f8`  
+**Branch:** `feature/RS-PRODUCT-1.1-interactive-scene`  
+**Platform:** macOS / Apple Silicon / Metal 3  
+**Execution Standard:** Evidence-first engineering. Accurate architectural classification. Direct 3D viewport interaction with real-time photograph response. Zero mock data.
 
 ---
 
-## Phase 0: Repository Discovery & Architecture Audit
-- [x] 0.1 Deep inspection of existing repository: Metal pipeline, scene models, workspace controller, camera, geometry, lighting, materials, environment, reconstruction, and test suites.
-- [x] 0.2 Author `RS_PRODUCT_1_0_ARCHITECTURE_AUDIT.md`: Document current architecture, reusable components, missing application infrastructure, state management, persistence, performance constraints, and technical risks.
-- [x] 0.3 Author `RS_PRODUCT_1_0_IMPLEMENTATION_PLAN.md`: Document execution sequence, component dependencies, and acceptance criteria.
+## Phase 0: Baseline Audit & Discrepancy Reconciliation
+- [ ] 0.1 Inspect checkpoint `27a38f8`, verify the 14 baseline aspects.
+- [ ] 0.2 Resolve Discrepancy A: Application architecture (local web-based application served via FastAPI/Uvicorn, accessible via browser or desktop webview, not a native AppKit/SwiftUI binary).
+- [ ] 0.3 Resolve Discrepancy B: Sample-count configuration (reconcile 32 samples per light in CPU reference / final UI requests vs 25 SPP in historical benchmarks).
+- [ ] 0.4 Deliverable: Author `RS_PRODUCT_1_1_BASELINE_AUDIT.md`.
 
-## Phase 1: Bounded Rendering Readiness Verification (RS-SPIKE-3C.3.1)
-- [x] 1.1 Verify GGX remediation remains intact.
-- [x] 1.2 Verify environment lighting CPU–Metal parity.
-- [x] 1.3 Verify existing E.1 guided-filter reconstruction path remains functional.
-- [x] 1.4 Verify direct + environment illumination energy conservation ($k_d + F_0 \le 1.0$) and non-double-counting additivity.
-- [x] 1.5 Verify protected-region zero-mutation ($0.0000000000$).
-- [x] 1.6 Audit photographic comparison boards and 1080p host wall-clock latency characteristics.
-- [x] 1.7 Author `RS_PRODUCT_1_0_RENDERING_READINESS.md`.
+## Phase 1: Real 3D Interaction Engine
+- [ ] 1.1 Direct 3D Light Selection:
+  - Ray-casting / hit-testing in 3D viewport canvas for area light quads and gizmo handles.
+  - Consistent selection synchronization across 3D canvas, hierarchy tree, and inspector.
+- [ ] 1.2 3D Translation Gizmo ($X, Y, Z$):
+  - Interactive mouse drag along projected world axes.
+  - Active axis highlight and visual coordinate HUD.
+  - Mutates actual world-space coordinates in authoritative scene state.
+- [ ] 1.3 3D Rotation Gizmo & Euler Controls:
+  - Pitch, Yaw, and Roll manipulation.
+  - Normal emission vector recomputation and visual orientation cue.
+  - Dynamic shadow penumbra and specular highlight updates in the photograph.
+- [ ] 1.4 Light Dimensions & Scale:
+  - Intuitive width and height adjustments in 3D viewport and inspector.
+  - Updates physical emitting area and inverse-square / radiometric falloff.
+- [ ] 1.5 Interaction Reliability:
+  - Dragging safeguards: prevent camera movement during gizmo drag.
+  - Transactional undo/redo grouping on drag end.
 
-## Phase 2: RS-PRODUCT-1.0A — Core Application Architecture & Studio Workspace
-- [x] 2.1 Design and implement application package structure (`relight_studio/`):
-  - Application controller (`relight_studio/controller.py`)
-  - Project management & `.relight` bundle specification (`relight_studio/project.py`)
-  - Rendering orchestrator with async worker and stale-frame cancellation (`relight_studio/orchestrator.py`)
-  - Workspace UI server / client architecture (`relight_studio/server.py` & web assets)
-- [x] 2.2 Build the professional Dark Studio UI:
-  - Photograph Viewport (Zoom, pan, fit-to-screen, before/after wipe, mode selection, live preview)
-  - 3D Virtual Studio Viewport (Camera orbit/pan/zoom, ground/cove grid, subject proxy, area lights, selection & gizmo)
-  - Scene Hierarchy Panel (Tree view, object selection, rename, toggle visibility, add/remove lights)
-  - Context Inspector Panel (Exact parameter controls for Light, Material, Environment, Camera, Project)
+## Phase 2: Camera & Scene Navigation
+- [ ] 2.1 Refine 3D Orbit, Pan, and Zoom in Stage Viewport:
+  - Independent camera orbit (left drag), pan (shift drag / middle drag), and zoom (wheel).
+  - Focus selected object button (centers view on active light or subject).
+  - Reset camera button (returns to standard 3/4 perspective studio view).
+  - Clear separation between camera navigation and gizmo picking.
 
-## Phase 3: RS-PRODUCT-1.0B — Photograph & Project Workflow
-- [x] 3.1 Implement Project Creation, Photograph Import, and Metadata Extraction:
-  - Support standard photographic formats (JPEG, PNG, TIFF, WebP).
-  - Extract dimensions, color profiles, and maintain immutable source references.
-  - Implement project bundle format (`.relight` bundle with `project.json` and asset links).
-- [x] 3.2 Implement Save, Load, and Recent Projects:
-  - Serialize full authoritative scene state, camera, proxy, receiver, lights, materials, environment, render settings.
-  - Non-destructive image guarantees: original photograph is never modified.
-  - Reopen and deterministic reload validation.
+## Phase 3: Subject & Receiver Interaction
+- [ ] 3.1 Subject Proxy Selection & Control:
+  - Select subject proxy in 3D viewport or hierarchy.
+  - Adjust proxy type (OBB, Superquadric, Mesh), dimensions ($X, Y, Z$), and ground elevation.
+  - Synchronous photograph update with geometry-dependent contact occlusion and shadow casting.
+- [ ] 3.2 Receiver Geometry Selection & Control:
+  - Select receiver in 3D viewport or hierarchy.
+  - Adjust receiver type (Floor Plane vs Cyclorama Cove), cove radius, and wall $Z$.
+  - Reflect curvature in 3D stage and photographic contact shadow.
 
-## Phase 4: RS-PRODUCT-1.0C — Scene & Interaction Integration
-- [x] 4.1 Unify Authoritative Scene State between 3D Viewport, Photograph Viewport, Scene Tree, and Inspector.
-- [x] 4.2 Implement Light Selection and Interactive Manipulation:
-  - Click-to-select in 3D viewport and scene hierarchy.
-  - Interactive transform gizmo (Translate X/Y/Z, Rotate Pitch/Yaw/Roll, Scale Width/Height).
-  - Multi-light management: Add new light, duplicate light, remove light, toggle emission, toggle shadow.
-- [x] 4.3 Implement Transactional Undo / Redo:
-  - Multi-level history stack with state diffing and deterministic replay.
+## Phase 4: Photographic Viewport & 3D Stage Synchronization
+- [ ] 4.1 Real-Time Synchronization Pipeline:
+  - Ensure every light move, rotation, resize, intensity, color, roughness, environment rotation, and proxy transform updates the photograph immediately.
+  - Stale-frame rejection: in-flight intermediate renders are cancelled when new state arrives.
+- [ ] 4.2 Before / After Split Wipe & Inspection:
+  - Draggable split wipe slider across original plate and relit image.
+  - 1:1 pixel inspect, fit-to-screen, and smooth pan/zoom.
 
-## Phase 5: RS-PRODUCT-1.0D — Live Rendering Integration
-- [x] 5.1 Connect Metal GPU pipeline (`MetalRenderBackend`) with CPU fallback (`RenderBackend`).
-- [x] 5.2 Implement Dual-Mode Rendering:
-  - Interactive Preview Mode: Responsive 1024x576 rendering at high frame rates.
-  - Final Quality Mode: Full resolution, high-sample Monte Carlo, deterministic export.
-- [x] 5.3 Implement Render Queue & Stale-Frame Cancellation:
-  - Ensure fast mouse dragging generates smooth previews without request backlogs.
-  - Discard outdated intermediate frames asynchronously.
+## Phase 5: Dynamic Preview Quality & Lighting Presets
+- [ ] 5.1 Dynamic Preview Policy:
+  - Fast, responsive $1024 \times 576$ preview during active dragging ($>190\,\text{FPS}$).
+  - Progressive quality render once interaction settles ($250\,\text{ms}$ debounce).
+  - Full-resolution Final Quality render on demand.
+- [ ] 5.2 Studio Lighting Presets:
+  - Verified starter configurations backed by real scene values: `Key Softbox`, `Fill Softbox`, `Rim Strip`, `Top Light`, `Side Light`.
 
-## Phase 6: RS-PRODUCT-1.0E — Validation, Testing & Deliverables
-- [x] 6.1 Author comprehensive automated test suite (`tests/RS-PRODUCT-1.0/`):
-  - Application architecture & state tests (5 passed)
-  - Project workflow & serialization tests (3 passed)
-  - Interaction & gizmo tests (5 passed)
-  - Live rendering & async orchestrator tests (3 passed)
-  - Non-destructive image preservation tests (3 passed)
-- [x] 6.2 Capture visual screenshots of all 10 required states:
-  1. Empty application workspace
-  2. New project
-  3. Imported photograph
-  4. Photograph viewport
-  5. 3D scene viewport
-  6. Scene hierarchy
-  7. Light inspector
-  8. Light selection and transformation
-  9. Relit photograph
-  10. Saved and reopened project
-- [x] 6.3 Benchmark application responsiveness, end-to-end latency, and memory stability.
-- [x] 6.4 Author remaining reports:
-  - `RS_PRODUCT_1_0_IMPLEMENTATION_REPORT.md`
-  - `RS_PRODUCT_1_0_VALIDATION_REPORT.md`
-  - `RS_PRODUCT_1_0_PERFORMANCE_REPORT.md`
-- [x] 6.5 Deliver final milestone summary and verdict.
+## Phase 6: Project Reliability & Persistence Hardening
+- [ ] 6.1 Transactional Project Saving:
+  - Atomic write via temporary directory to prevent file corruption during interrupted saves.
+  - Robust missing-asset detection and fallback recovery.
+
+## Phase 7: Validation, Visual Evidence & Final Reports
+- [ ] 7.1 Author comprehensive test suite in `tests/RS-PRODUCT-1.1/`.
+- [ ] 7.2 Run full regression suite across all repository tests.
+- [ ] 7.3 Capture 14 visual verification screenshots and interaction sequence records.
+- [ ] 7.4 Deliver all required technical reports:
+  - `RS_PRODUCT_1_1_IMPLEMENTATION_REPORT.md`
+  - `RS_PRODUCT_1_1_INTERACTION_VALIDATION.md`
+  - `RS_PRODUCT_1_1_RENDERING_VALIDATION.md`
+  - `RS_PRODUCT_1_1_PERFORMANCE_REPORT.md`
+  - `RS_PRODUCT_1_1_KNOWN_LIMITATIONS.md`
+- [ ] 7.5 Final engineering verdict.
