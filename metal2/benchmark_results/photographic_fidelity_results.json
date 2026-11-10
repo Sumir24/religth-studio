@@ -1,0 +1,110 @@
+[
+  {
+    "case_id": "P1_nike_sneaker",
+    "resolution": "576x1024",
+    "rigs": [
+      {
+        "rig_name": "1_Light_Key",
+        "num_lights": 1,
+        "dci_foreground": 0.99797,
+        "dci_background": 0.99856,
+        "dci_whole": 0.99825,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "2_Lights_Key_Fill",
+        "num_lights": 2,
+        "dci_foreground": 0.9966,
+        "dci_background": 0.99475,
+        "dci_whole": 0.99574,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "3_Lights_Key_Fill_Rim",
+        "num_lights": 3,
+        "dci_foreground": 0.9966,
+        "dci_background": 0.99474,
+        "dci_whole": 0.99573,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      }
+    ]
+  },
+  {
+    "case_id": "P2_classical_statue",
+    "resolution": "576x1024",
+    "rigs": [
+      {
+        "rig_name": "1_Light_Key",
+        "num_lights": 1,
+        "dci_foreground": 0.95754,
+        "dci_background": 0.9966,
+        "dci_whole": 0.96312,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "2_Lights_Key_Fill",
+        "num_lights": 2,
+        "dci_foreground": 0.96411,
+        "dci_background": 0.99722,
+        "dci_whole": 0.96883,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "3_Lights_Key_Fill_Rim",
+        "num_lights": 3,
+        "dci_foreground": 0.96411,
+        "dci_background": 0.99722,
+        "dci_whole": 0.96883,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      }
+    ]
+  },
+  {
+    "case_id": "P3_architectural_relief",
+    "resolution": "768x512",
+    "rigs": [
+      {
+        "rig_name": "1_Light_Key",
+        "num_lights": 1,
+        "dci_foreground": 0.99999,
+        "dci_background": 0.99984,
+        "dci_whole": 0.9999,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "2_Lights_Key_Fill",
+        "num_lights": 2,
+        "dci_foreground": 0.99998,
+        "dci_background": 0.99982,
+        "dci_whole": 0.99989,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      },
+      {
+        "rig_name": "3_Lights_Key_Fill_Rim",
+        "num_lights": 3,
+        "dci_foreground": 0.99998,
+        "dci_background": 0.99982,
+        "dci_whole": 0.99989,
+        "gate_dci": "PASS",
+        "zero_mutation_diff": 0.0,
+        "gate_zero_mutation": "PASS"
+      }
+    ]
+  }
+]

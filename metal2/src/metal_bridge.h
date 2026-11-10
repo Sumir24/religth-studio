@@ -77,6 +77,9 @@ typedef struct {
     uint32_t energy_convention;
     uint32_t n_samples;
     uint32_t seed;
+    uint32_t cast_shadows;
+    uint32_t enabled;
+    float padding;
 } CLightParams;
 
 typedef struct {
@@ -107,7 +110,8 @@ int metal2_render_frame(
     const CCameraParams* cam,
     const CProxyParams* proxy,
     const CReceiverParams* receiver,
-    const CLightParams* light,
+    const CLightParams* lights,
+    uint32_t num_lights,
     const CTriangleMesh* triangles,
     uint32_t num_triangles,
     const float* depth_map,

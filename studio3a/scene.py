@@ -57,7 +57,7 @@ def validate_finite_floats(obj: Any, path: str = "scene") -> None:
 class SceneMetadata:
     name: str = "Untitled Studio Scene"
     created_at: float = field(default_factory=time.time)
-    version: str = "3.0.0"
+    version: str = "3.1.0"
     author: str = "Relight Artist"
 
 
@@ -134,8 +134,19 @@ class AreaLightData:
     temperature_kelvin: float = 5600.0  # Daylight standard
     energy_convention: EnergyConvention = EnergyConvention.FIXED_RADIANCE
     enabled: bool = True
+    cast_shadows: bool = True
+
+    @property
+    def light_id(self) -> str:
+        return self.id
+
+    @light_id.setter
+    def light_id(self, val: str) -> None:
+        self.id = val
 
     def validate(self) -> None:
+        if not self.id:
+            raise ValueError("Area light ID cannot be empty.")
         if self.width <= 0.0 or self.height <= 0.0:
             raise ValueError(f"Area light dimensions must be positive: {self.width}x{self.height}")
         if self.intensity < 0.0:
@@ -171,6 +182,11 @@ class StudioScene:
     receiver: ReceiverData = field(default_factory=ReceiverData)
     lights: List[AreaLightData] = field(default_factory=lambda: [AreaLightData()])
     render_settings: RenderSettingsData = field(default_factory=RenderSettingsData)
+    active_light_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.active_light_id is None and self.lights:
+            self.active_light_id = self.lights[0].id
 
     def validate(self) -> None:
         """Validates all scene parameters against physical invariants."""
@@ -179,10 +195,124 @@ class StudioScene:
         self.receiver.validate()
         if not self.lights:
             raise ValueError("StudioScene must contain at least one light.")
+        if len(self.lights) > 8:
+            raise ValueError(f"StudioScene supports at most 8 lights on GPU pipeline (found {len(self.lights)}).")
+        
+        # Validate unique light IDs
+        light_ids = set()
         for light in self.lights:
             light.validate()
+            if light.id in light_ids:
+                raise ValueError(f"Duplicate light ID detected: '{light.id}'")
+            light_ids.add(light.id)
+
+        # Validate active light selection
+        if self.active_light_id is None or self.active_light_id not in light_ids:
+            self.active_light_id = self.lights[0].id
+
         self.render_settings.validate()
         validate_finite_floats(asdict(self))
+
+    def get_light(self, light_id: str) -> Optional[AreaLightData]:
+        for l in self.lights:
+            if l.id == light_id:
+                return l
+        return None
+
+    def get_active_light(self) -> AreaLightData:
+        if self.active_light_id:
+            l = self.get_light(self.active_light_id)
+            if l is not None:
+                return l
+        self.active_light_id = self.lights[0].id
+        return self.lights[0]
+
+    def select_light(self, light_id: str) -> bool:
+        if any(l.id == light_id for l in self.lights):
+            self.active_light_id = light_id
+            return True
+        return False
+
+    def add_light(self, light: Optional[AreaLightData] = None) -> AreaLightData:
+        if len(self.lights) >= 8:
+            raise ValueError("Maximum number of lights (8) reached.")
+        if light is None:
+            idx = len(self.lights) + 1
+            light = AreaLightData(
+                id=f"light_{idx}_{int(time.time()*1000)%10000}",
+                name=f"Studio Light {idx}",
+                position=[-1.2, 1.8, 1.5] if idx % 2 == 0 else [1.2, 1.8, 1.5],
+                rotation_deg=[-35.0, -30.0 if idx % 2 == 0 else 30.0, 0.0],
+                width=0.60,
+                height=0.60,
+                intensity=1.0,
+                color_rgb=[1.0, 1.0, 1.0],
+                temperature_kelvin=5600.0,
+                energy_convention=EnergyConvention.FIXED_RADIANCE,
+                enabled=True,
+                cast_shadows=True
+            )
+        base_id = light.id
+        counter = 1
+        while any(l.id == light.id for l in self.lights):
+            light.id = f"{base_id}_{counter}"
+            counter += 1
+        self.lights.append(light)
+        self.active_light_id = light.id
+        return light
+
+    def remove_light(self, light_id: str) -> bool:
+        if len(self.lights) <= 1:
+            raise ValueError("Cannot remove the last remaining light from the scene.")
+        for i, l in enumerate(self.lights):
+            if l.id == light_id:
+                self.lights.pop(i)
+                if self.active_light_id == light_id:
+                    self.active_light_id = self.lights[min(i, len(self.lights) - 1)].id
+                return True
+        return False
+
+    def duplicate_light(self, light_id: str) -> AreaLightData:
+        src = self.get_light(light_id)
+        if src is None:
+            raise ValueError(f"Light '{light_id}' not found.")
+        if len(self.lights) >= 8:
+            raise ValueError("Maximum number of lights (8) reached.")
+        new_light = copy.deepcopy(src)
+        idx = len(self.lights) + 1
+        new_light.id = f"{src.id}_copy_{int(time.time()*1000)%10000}"
+        new_light.name = f"{src.name} (Copy)"
+        # Slight physical spatial offset
+        new_light.position = [src.position[0] + 0.25, src.position[1], src.position[2]]
+        self.lights.append(new_light)
+        self.active_light_id = new_light.id
+        return new_light
+
+    def toggle_light(self, light_id: str, enabled: Optional[bool] = None) -> bool:
+        l = self.get_light(light_id)
+        if l is None:
+            raise ValueError(f"Light '{light_id}' not found.")
+        if enabled is not None:
+            l.enabled = enabled
+        else:
+            l.enabled = not l.enabled
+        return l.enabled
+
+    def toggle_light_shadows(self, light_id: str, cast_shadows: Optional[bool] = None) -> bool:
+        l = self.get_light(light_id)
+        if l is None:
+            raise ValueError(f"Light '{light_id}' not found.")
+        if cast_shadows is not None:
+            l.cast_shadows = cast_shadows
+        else:
+            l.cast_shadows = not l.cast_shadows
+        return l.cast_shadows
+
+    def reorder_lights(self, order_ids: List[str]) -> None:
+        if set(order_ids) != set(l.id for l in self.lights):
+            raise ValueError("Order IDs must match existing scene light IDs exactly.")
+        lookup = {l.id: l for l in self.lights}
+        self.lights = [lookup[lid] for lid in order_ids]
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes scene to a JSON-compatible dictionary."""
@@ -191,9 +321,13 @@ class StudioScene:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> StudioScene:
-        """Deserializes scene from dictionary with type safety."""
+        """Deserializes scene from dictionary with backward compatibility and type safety."""
         d = copy.deepcopy(data)
-        meta = SceneMetadata(**d.get("metadata", {}))
+        meta_raw = d.get("metadata", {})
+        # Schema migration check: upgrade older scenes to 3.1.0
+        meta = SceneMetadata(**meta_raw)
+        meta.version = "3.1.0"
+        
         cam = CameraData(**d.get("camera", {}))
         
         subj_raw = d.get("subject", {})
@@ -207,9 +341,16 @@ class StudioScene:
         rec = ReceiverData(**rec_raw)
         
         lights = []
-        for l_raw in d.get("lights", []):
+        for idx, l_raw in enumerate(d.get("lights", [])):
             if "energy_convention" in l_raw:
                 l_raw["energy_convention"] = EnergyConvention(l_raw["energy_convention"])
+            # Backward-compatible migrations:
+            if "cast_shadows" not in l_raw:
+                l_raw["cast_shadows"] = True
+            if "id" not in l_raw:
+                l_raw["id"] = f"light_{idx+1}"
+            if "name" not in l_raw:
+                l_raw["name"] = f"Studio Light {idx+1}"
             lights.append(AreaLightData(**l_raw))
             
         rnd_raw = d.get("render_settings", {})
@@ -217,7 +358,19 @@ class StudioScene:
             rnd_raw["quality"] = RenderQuality(rnd_raw["quality"])
         rnd = RenderSettingsData(**rnd_raw)
         
-        scene = cls(metadata=meta, camera=cam, subject=subj, receiver=rec, lights=lights, render_settings=rnd)
+        active_lid = d.get("active_light_id")
+        if not active_lid and lights:
+            active_lid = lights[0].id
+        
+        scene = cls(
+            metadata=meta,
+            camera=cam,
+            subject=subj,
+            receiver=rec,
+            lights=lights,
+            render_settings=rnd,
+            active_light_id=active_lid
+        )
         scene.validate()
         return scene
 

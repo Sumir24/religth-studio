@@ -156,7 +156,7 @@ class ReconstructionEngine:
         self,
         image_orig_srgb: np.ndarray,
         direct_irradiance: np.ndarray,
-        direct_visibility: np.ndarray,
+        direct_visibility: Optional[np.ndarray] = None,
         ambient_fill: float = 0.15,
         protected_mask: Optional[np.ndarray] = None
     ) -> dict[str, np.ndarray]:
@@ -164,8 +164,8 @@ class ReconstructionEngine:
         Executes end-to-end reconstruction from original photograph.
         Args:
             image_orig_srgb: (H, W, 3) original photograph in display sRGB [0, 1].
-            direct_irradiance: (H, W, 3) linear direct lighting irradiance from 3D area light.
-            direct_visibility: (H, W) geometric shadow visibility in [0, 1].
+            direct_irradiance: (H, W, 3) linear direct lighting irradiance from 3D area light(s).
+            direct_visibility: Optional (H, W) geometric shadow visibility in [0, 1].
             ambient_fill: Ambient indirect light baseline fraction.
             protected_mask: (H, W) boolean mask of regions that must NEVER be modified.
         Returns:
@@ -186,7 +186,10 @@ class ReconstructionEngine:
         
         # Direct illumination: modulated by physical area light irradiance and shadow visibility
         irr_luma = linear_to_luminance(direct_irradiance)
-        Y_direct = Yb * irr_luma * direct_visibility
+        if direct_visibility is not None:
+            Y_direct = Yb * irr_luma * direct_visibility
+        else:
+            Y_direct = Yb * irr_luma
         
         Y_relit_target = Y_indirect + Y_direct
         R_target = np.clip(Y_relit_target / np.maximum(Yb, 1e-4), 0.05, 20.0)

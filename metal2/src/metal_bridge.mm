@@ -348,7 +348,8 @@ int metal2_render_frame(
     const CCameraParams* cam,
     const CProxyParams* proxy,
     const CReceiverParams* receiver,
-    const CLightParams* light,
+    const CLightParams* lights,
+    uint32_t num_lights,
     const CTriangleMesh* triangles,
     uint32_t num_triangles,
     const float* depth_map,
@@ -361,7 +362,7 @@ int metal2_render_frame(
     float* out_irradiance,
     float* out_gpu_time_ms
 ) {
-    if (!cam || !proxy || !receiver || !light || !depth_map || !normals_map ||
+    if (!cam || !proxy || !receiver || !lights || num_lights == 0 || !depth_map || !normals_map ||
         !image_orig_srgb || !out_relit_srgb || !out_visibility || !out_irradiance) {
         return METAL_ERROR_INVALID_ARGUMENT;
     }
@@ -511,7 +512,7 @@ int metal2_render_frame(
         [encoder setBytes:cam length:sizeof(CCameraParams) atIndex:0];
         [encoder setBytes:proxy length:sizeof(CProxyParams) atIndex:1];
         [encoder setBytes:receiver length:sizeof(CReceiverParams) atIndex:2];
-        [encoder setBytes:light length:sizeof(CLightParams) atIndex:3];
+        [encoder setBytes:lights length:num_lights * sizeof(CLightParams) atIndex:3];
         if (g_buffer_pool.buf_triangles && num_triangles > 0) {
             [encoder setBuffer:g_buffer_pool.buf_triangles offset:0 atIndex:4];
         } else {
@@ -526,6 +527,7 @@ int metal2_render_frame(
         [encoder setBuffer:g_buffer_pool.buf_out_vis offset:0 atIndex:11];
         [encoder setBuffer:g_buffer_pool.buf_out_irr offset:0 atIndex:12];
         [encoder setBytes:&has_prot length:sizeof(uint32_t) atIndex:13];
+        [encoder setBytes:&num_lights length:sizeof(uint32_t) atIndex:14];
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
 
         // --- PASS 2: E.1 Guidance & Target Shading Ratio Initialization ---

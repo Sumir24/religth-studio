@@ -116,13 +116,11 @@ class RectangularAreaLight:
         if seed is not None:
             np.random.seed(seed)
             
-        n_side = int(math.ceil(math.sqrt(n_samples)))
+        n_side = max(1, int(math.sqrt(n_samples)))
         actual_samples = []
         
         for i in range(n_side):
             for j in range(n_side):
-                if len(actual_samples) >= n_samples:
-                    break
                 if stratified_centers:
                     u = (float(i) + 0.5) / float(n_side) - 0.5
                     v = (float(j) + 0.5) / float(n_side) - 0.5

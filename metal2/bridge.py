@@ -53,6 +53,9 @@ class CLightParams(Structure):
         ("energy_convention", c_uint32),
         ("n_samples", c_uint32),
         ("seed", c_uint32),
+        ("cast_shadows", c_uint32),
+        ("enabled", c_uint32),
+        ("padding", c_float),
     ]
 
 
@@ -124,6 +127,7 @@ class Metal2Bridge:
             POINTER(CProxyParams),
             POINTER(CReceiverParams),
             POINTER(CLightParams),
+            c_uint32,
             POINTER(CTriangleMesh),
             c_uint32,
             POINTER(c_float),
@@ -237,7 +241,7 @@ class Metal2Bridge:
         cam_params: CCameraParams,
         proxy_params: CProxyParams,
         rec_params: CReceiverParams,
-        light_params: CLightParams,
+        light_params: Any,
         triangles: Optional[np.ndarray],
         depth_map: np.ndarray,
         normals_map: np.ndarray,
@@ -247,11 +251,20 @@ class Metal2Bridge:
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
         """
         Executes full 3D rendering pass on Metal GPU.
+        Accepts either a single CLightParams or a list of CLightParams.
         Returns: (relit_srgb, visibility, irradiance, gpu_time_ms)
         """
         H, W = image_orig_srgb.shape[:2]
         assert depth_map.shape == (H, W)
         assert normals_map.shape == (H, W, 3)
+
+        # Normalize light params to an array of CLightParams
+        if isinstance(light_params, (list, tuple)):
+            lights_list = list(light_params)
+        else:
+            lights_list = [light_params]
+        num_lights = len(lights_list)
+        lights_arr = (CLightParams * num_lights)(*lights_list)
 
         # Prepare outputs
         out_relit = np.empty((H, W, 3), dtype=np.float32)
@@ -295,7 +308,8 @@ class Metal2Bridge:
             ctypes.byref(cam_params),
             ctypes.byref(proxy_params),
             ctypes.byref(rec_params),
-            ctypes.byref(light_params),
+            lights_arr,
+            c_uint32(num_lights),
             tri_ptr,
             c_uint32(num_tri),
             depth_ptr,

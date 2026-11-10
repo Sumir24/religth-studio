@@ -192,15 +192,17 @@ class RenderBackend:
             fg_mask=fg_mask
         )
 
-        # 5. Lighting & Direct Irradiance Integration
-        total_irradiance = np.zeros((H, W, 3), dtype=np.float32)
-        total_visibility = np.ones((H, W), dtype=np.float32)
+        # 5. Multi-Light Direct Additive Irradiance & Shadow Transport
+        total_unshadowed_irradiance = np.zeros((H, W, 3), dtype=np.float32)
+        total_illuminated_irradiance = np.zeros((H, W, 3), dtype=np.float32)
         active_surface_mask = fg_mask | is_receiver
+        num_active_lights = 0
         
         t_light_start = time.time()
-        for light_data in scene.lights:
+        for l_idx, light_data in enumerate(scene.lights):
             if not light_data.enabled:
                 continue
+            num_active_lights += 1
                 
             light = RectangularAreaLight(
                 position=light_data.position,
@@ -215,27 +217,31 @@ class RenderBackend:
             )
             
             # Direct unshadowed irradiance on active surfaces
-            irr = light.evaluate_unshadowed_irradiance(
+            irr_i = light.evaluate_unshadowed_irradiance(
                 surface_pos=surface_pos,
                 surface_norm=surface_norm,
                 n_samples=n_samples,
-                seed=42
+                seed=42 + l_idx * 17
             )
-            irr[is_sky] = 0.0
-            total_irradiance += irr
+            irr_i[is_sky] = 0.0
+            total_unshadowed_irradiance += irr_i
             
-            # Geometric Direct Visibility (Cast Shadow + Self-Occlusion + Receiver Occlusion)
-            if scene.render_settings.enable_cast_shadows:
-                vis = shadow_engine.compute_direct_visibility(
+            # Geometric Direct Visibility for this specific light
+            if scene.render_settings.enable_cast_shadows and getattr(light_data, "cast_shadows", True):
+                vis_i = shadow_engine.compute_direct_visibility(
                     surface_pos=surface_pos,
                     surface_norm=surface_norm,
                     light=light,
                     n_samples=n_samples,
-                    seed=42,
+                    seed=42 + l_idx * 17,
                     active_mask=active_surface_mask
                 )
-                vis[is_sky] = 1.0
-                total_visibility = np.minimum(total_visibility, vis)
+                vis_i[is_sky] = 1.0
+            else:
+                vis_i = np.ones((H, W), dtype=np.float32)
+            
+            # Additive illumination: each light's visibility modulates only its own irradiance
+            total_illuminated_irradiance += irr_i * vis_i[..., None]
                 
         # 6. Contact Grounding Term
         if scene.render_settings.enable_contact_grounding:
@@ -245,19 +251,29 @@ class RenderBackend:
                 ground_y=scene.receiver.ground_y,
                 r_contact=0.08
             )
-            # Modulate direct visibility at contact interface on receiver
-            total_visibility[is_receiver] = np.minimum(total_visibility[is_receiver], c_contact[is_receiver])
+            # Modulate direct illuminated irradiance at contact interface on receiver
+            total_illuminated_irradiance[is_receiver] *= c_contact[is_receiver, None]
         else:
             c_contact = np.ones((H, W), dtype=np.float32)
 
+        # Composite radiometric visibility for diagnostics / metrics
+        unshadowed_luma = linear_to_luminance(total_unshadowed_irradiance)
+        illuminated_luma = linear_to_luminance(total_illuminated_irradiance)
+        composite_visibility = np.where(
+            unshadowed_luma > 1e-5,
+            np.clip(illuminated_luma / np.maximum(unshadowed_luma, 1e-5), 0.0, 1.0),
+            1.0
+        ).astype(np.float32)
+        composite_visibility[is_sky] = 1.0
+
         t_shadow_ms = (time.time() - t_light_start) * 1000.0
 
-        # 7. Non-Destructive Image Reconstruction (E.1 + C3)
+        # 7. Non-Destructive Image Reconstruction (Single Unified E.1 + C3 pass)
         t_recon_start = time.time()
         recon_res = self._recon_engine.reconstruct_relit_image(
             image_orig_srgb=image_orig_srgb,
-            direct_irradiance=total_irradiance * scene.render_settings.exposure,
-            direct_visibility=total_visibility,
+            direct_irradiance=total_illuminated_irradiance * scene.render_settings.exposure,
+            direct_visibility=None,  # Illumination and contact occlusion are fully integrated into direct_irradiance
             ambient_fill=scene.render_settings.ambient_fill
         )
         t_recon_ms = (time.time() - t_recon_start) * 1000.0
@@ -274,9 +290,12 @@ class RenderBackend:
             "recon_latency_ms": round(t_recon_ms, 2),
             "quality_mode": effective_quality.value,
             "sample_count": n_samples,
-            "min_visibility": round(float(np.min(total_visibility)), 4),
-            "mean_visibility": round(float(np.mean(total_visibility)), 4),
-            "max_irradiance": round(float(np.max(total_irradiance)), 4),
+            "num_lights": len(scene.lights),
+            "num_active_lights": num_active_lights,
+            "min_visibility": round(float(np.min(composite_visibility)), 4),
+            "mean_visibility": round(float(np.mean(composite_visibility)), 4),
+            "max_irradiance": round(float(np.max(total_unshadowed_irradiance)), 4),
+            "max_illuminated_irradiance": round(float(np.max(total_illuminated_irradiance)), 4),
             "proxy_type": scene.subject.proxy_type.value,
             "receiver_type": scene.receiver.receiver_type.value
         }
@@ -284,9 +303,10 @@ class RenderBackend:
         return {
             "relit_srgb": recon_res["relit_srgb"],
             "image_orig_srgb": image_orig_srgb,
-            "direct_visibility": total_visibility,
+            "direct_visibility": composite_visibility,
             "contact_occlusion": c_contact,
-            "direct_irradiance": total_irradiance,
+            "direct_irradiance": total_unshadowed_irradiance,
+            "illuminated_irradiance": total_illuminated_irradiance,
             "shading_ratio": recon_res["R_eff"],
             "err_rgb": recon_res["err_rgb"],
             "proxy_overlay": proxy_overlay,

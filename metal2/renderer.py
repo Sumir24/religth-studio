@@ -154,53 +154,59 @@ class MetalRenderBackend:
         c_rec.cove_radius = float(rec.cove_radius)
         c_rec.wall_z = float(rec.wall_z)
 
-        # 4. Pack Light Parameters
-        active_light = scene.lights[0]
-        c_light = CLightParams()
-        c_light.position[0] = float(active_light.position[0])
-        c_light.position[1] = float(active_light.position[1])
-        c_light.position[2] = float(active_light.position[2])
+        # 4. Pack Multi-Light Parameters (up to 8 lights)
+        c_lights = []
+        num_active_lights = 0
+        for l_idx, light_data in enumerate(scene.lights[:8]):
+            c_light = CLightParams()
+            c_light.position[0] = float(light_data.position[0])
+            c_light.position[1] = float(light_data.position[1])
+            c_light.position[2] = float(light_data.position[2])
 
-        # Canonical light orientation vectors via RectangularAreaLight
-        light_obj = RectangularAreaLight(
-            position=active_light.position,
-            rotation_euler=active_light.rotation_deg,
-            width=active_light.width,
-            height=active_light.height,
-            intensity=active_light.intensity,
-            color_rgb=active_light.color_rgb,
-            temperature_kelvin=active_light.temperature_kelvin,
-            energy_convention=active_light.energy_convention,
-            enabled=active_light.enabled
-        )
-        u_tan = light_obj.u_tangent
-        v_bit = light_obj.v_bitangent
-        n_light = light_obj.normal
+            light_obj = RectangularAreaLight(
+                position=light_data.position,
+                rotation_euler=light_data.rotation_deg,
+                width=light_data.width,
+                height=light_data.height,
+                intensity=light_data.intensity,
+                color_rgb=light_data.color_rgb,
+                temperature_kelvin=light_data.temperature_kelvin,
+                energy_convention=light_data.energy_convention,
+                enabled=light_data.enabled
+            )
+            u_tan = light_obj.u_tangent
+            v_bit = light_obj.v_bitangent
+            n_light = light_obj.normal
 
-        c_light.u_tangent[0], c_light.u_tangent[1], c_light.u_tangent[2] = float(u_tan[0]), float(u_tan[1]), float(u_tan[2])
-        c_light.v_bitangent[0], c_light.v_bitangent[1], c_light.v_bitangent[2] = float(v_bit[0]), float(v_bit[1]), float(v_bit[2])
-        c_light.normal[0], c_light.normal[1], c_light.normal[2] = float(n_light[0]), float(n_light[1]), float(n_light[2])
+            c_light.u_tangent[0], c_light.u_tangent[1], c_light.u_tangent[2] = float(u_tan[0]), float(u_tan[1]), float(u_tan[2])
+            c_light.v_bitangent[0], c_light.v_bitangent[1], c_light.v_bitangent[2] = float(v_bit[0]), float(v_bit[1]), float(v_bit[2])
+            c_light.normal[0], c_light.normal[1], c_light.normal[2] = float(n_light[0]), float(n_light[1]), float(n_light[2])
 
-        c_light.dimensions[0] = float(active_light.width)
-        c_light.dimensions[1] = float(active_light.height)
+            c_light.dimensions[0] = float(light_data.width)
+            c_light.dimensions[1] = float(light_data.height)
 
-        # Color and blackbody temperature
-        rgb_k = kelvin_to_linear_rgb(active_light.temperature_kelvin)
-        rgb_final = rgb_k * np.array(active_light.color_rgb, dtype=np.float32)
-        c_light.color_rgb[0] = float(rgb_final[0])
-        c_light.color_rgb[1] = float(rgb_final[1])
-        c_light.color_rgb[2] = float(rgb_final[2])
-        c_light.intensity = float(active_light.intensity)
-        c_light.energy_convention = 1 if active_light.energy_convention == EnergyConvention.FIXED_POWER else 0
-        c_light.n_samples = int(n_samples)
-        c_light.seed = 42
+            rgb_k = kelvin_to_linear_rgb(light_data.temperature_kelvin)
+            rgb_final = rgb_k * np.array(light_data.color_rgb, dtype=np.float32)
+            c_light.color_rgb[0] = float(rgb_final[0])
+            c_light.color_rgb[1] = float(rgb_final[1])
+            c_light.color_rgb[2] = float(rgb_final[2])
+            c_light.intensity = float(light_data.intensity)
+            c_light.energy_convention = 1 if light_data.energy_convention == EnergyConvention.FIXED_POWER else 0
+            c_light.n_samples = int(n_samples)
+            c_light.seed = 42 + l_idx * 17
+            c_light.cast_shadows = 1 if (scene.render_settings.enable_cast_shadows and getattr(light_data, "cast_shadows", True)) else 0
+            c_light.enabled = 1 if light_data.enabled else 0
+            c_light.padding = 0.0
+            c_lights.append(c_light)
+            if light_data.enabled:
+                num_active_lights += 1
 
         # 5. Execute on Metal GPU
         out_relit, out_vis, out_irr, gpu_time_ms = self.bridge.render_frame(
             cam_params=c_cam,
             proxy_params=c_proxy,
             rec_params=c_rec,
-            light_params=c_light,
+            light_params=c_lights,
             triangles=triangles_arr,
             depth_map=depth_map,
             normals_map=normals_map,
@@ -217,6 +223,8 @@ class MetalRenderBackend:
             "total_wall_ms": round(total_wall_ms, 2),
             "quality_mode": effective_quality.value,
             "sample_count": n_samples,
+            "num_lights": len(c_lights),
+            "num_active_lights": num_active_lights,
             "proxy_type": scene.subject.proxy_type.value,
             "receiver_type": scene.receiver.receiver_type.value,
             "device": "Apple Silicon (Metal)",

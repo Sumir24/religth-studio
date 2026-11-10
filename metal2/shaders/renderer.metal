@@ -26,6 +26,9 @@ struct LightParams {
     uint energy_convention; // 0: FIXED_RADIANCE, 1: FIXED_POWER
     uint n_samples;
     uint seed;
+    uint cast_shadows;
+    uint enabled;
+    float padding;
 };
 
 struct ProxyParams {
@@ -415,7 +418,7 @@ kernel void render_hybrid_studio_kernel(
     constant CameraParams& cam               [[buffer(0)]],
     constant ProxyParams& proxy               [[buffer(1)]],
     constant ReceiverParams& receiver         [[buffer(2)]],
-    constant LightParams& light               [[buffer(3)]],
+    constant const LightParams* lights        [[buffer(3)]],
     constant TriangleMesh* mesh_triangles     [[buffer(4)]],
     device const float* depth_map             [[buffer(5)]],
     device const packed_float3* normals_map   [[buffer(6)]],
@@ -426,6 +429,7 @@ kernel void render_hybrid_studio_kernel(
     device float* out_visibility              [[buffer(11)]],
     device packed_float3* out_irradiance      [[buffer(12)]],
     constant uint& has_protected_mask         [[buffer(13)]],
+    constant uint& num_lights                 [[buffer(14)]],
     uint2 pixel_coord                         [[thread_position_in_grid]]
 ) {
     if (pixel_coord.x >= cam.width || pixel_coord.y >= cam.height) return;
@@ -485,79 +489,88 @@ kernel void render_hybrid_studio_kernel(
         return;
     }
 
-    // 3. Stratified Area Light Direct Illumination & Shadow Transport
-    float3 light_pos = float3(light.position);
-    float3 light_norm = float3(light.normal);
-    float3 u_tan = float3(light.u_tangent);
-    float3 v_bit = float3(light.v_bitangent);
-    float2 l_dim = float2(light.dimensions);
-    float area = l_dim.x * l_dim.y;
-    
-    float radiance = (light.energy_convention == 1) ? (light.intensity / max(area * 3.141592653589793f, 1e-4f)) : light.intensity;
-    float3 emitter_radiance = float3(light.color_rgb) * radiance;
-
-    uint n_samples = max(light.n_samples, 1u);
-    uint grid_dim = uint(sqrt(float(n_samples)));
-    if (grid_dim < 1) grid_dim = 1;
-
-    float3 irr_acc = float3(0.0f);
-    float vis_acc = 0.0f;
+    // 3. Multi-Light Stratified Area Light Direct Illumination & Additive Shadow Transport
+    float3 total_unshadowed_irr = float3(0.0f);
+    float3 total_illuminated_irr = float3(0.0f);
 
     float3 p_bias = surface_pos + 1e-3f * surface_norm;
 
-    for (uint sy = 0; sy < grid_dim; ++sy) {
-        for (uint sx = 0; sx < grid_dim; ++sx) {
-            float su = (float(sx) + 0.5f) / float(grid_dim) - 0.5f;
-            float sv = (float(sy) + 0.5f) / float(grid_dim) - 0.5f;
-            float3 p_sample = light_pos + (su * l_dim.x) * u_tan + (sv * l_dim.y) * v_bit;
+    for (uint li = 0; li < num_lights; ++li) {
+        constant const LightParams& light = lights[li];
+        if (light.enabled == 0) continue;
 
-            float3 L_vec = p_sample - p_bias;
-            float dist_sq = max(dot(L_vec, L_vec), 1e-6f);
-            float dist = sqrt(dist_sq);
-            float3 L_dir = L_vec / dist;
+        float3 light_pos = float3(light.position);
+        float3 light_norm = float3(light.normal);
+        float3 u_tan = float3(light.u_tangent);
+        float3 v_bit = float3(light.v_bitangent);
+        float2 l_dim = float2(light.dimensions);
+        float area = l_dim.x * l_dim.y;
 
-            float cos_surf = max(dot(surface_norm, L_dir), 0.0f);
-            float cos_light = max(dot(-light_norm, L_dir), 0.0f);
+        float radiance = (light.energy_convention == 1) 
+            ? (light.intensity / max(area * 3.141592653589793f, 1e-4f)) 
+            : light.intensity;
+        float3 emitter_radiance = float3(light.color_rgb) * radiance;
 
-            // Shadow Ray Intersection
-            bool is_blocked = false;
-            float t_hit = 1e9f;
-            float3 dummy_n;
+        uint n_samples = max(light.n_samples, 1u);
+        uint grid_dim = uint(sqrt(float(n_samples)));
+        if (grid_dim < 1) grid_dim = 1;
 
-            // 1. Occlusion by subject proxy
-            if (proxy.proxy_type == 0) {
-                is_blocked = intersect_obb(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
-            } else if (proxy.proxy_type == 1) {
-                is_blocked = intersect_superquadric(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
-            } else if (proxy.proxy_type == 2 && mesh_triangles) {
-                is_blocked = intersect_mesh(p_bias, L_dir, mesh_triangles, proxy.num_triangles, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
-            } else if (proxy.proxy_type == 3) {
-                is_blocked = intersect_sphere(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
-            }
+        float3 irr_acc_li = float3(0.0f);
+        float vis_acc_li = 0.0f;
 
-            // 2. Occlusion by receiver geometry (cyclorama cove self-shadowing)
-            if (!is_blocked) {
-                float t_rec_hit = 1e9f;
-                bool hit_rec_shadow = false;
-                if (receiver.receiver_type == 1) {
-                    hit_rec_shadow = intersect_cyclorama(p_bias, L_dir, receiver, t_rec_hit, dummy_n);
+        for (uint sy = 0; sy < grid_dim; ++sy) {
+            for (uint sx = 0; sx < grid_dim; ++sx) {
+                float su = (float(sx) + 0.5f) / float(grid_dim) - 0.5f;
+                float sv = (float(sy) + 0.5f) / float(grid_dim) - 0.5f;
+                float3 p_sample = light_pos + (su * l_dim.x) * u_tan + (sv * l_dim.y) * v_bit;
+
+                float3 L_vec = p_sample - p_bias;
+                float dist_sq = max(dot(L_vec, L_vec), 1e-6f);
+                float dist = sqrt(dist_sq);
+                float3 L_dir = L_vec / dist;
+
+                float cos_surf = max(dot(surface_norm, L_dir), 0.0f);
+                float cos_light = max(dot(-light_norm, L_dir), 0.0f);
+
+                bool is_blocked = false;
+                if (light.cast_shadows != 0) {
+                    float t_hit = 1e9f;
+                    float3 dummy_n;
+
+                    // Occlusion by subject proxy
+                    if (proxy.proxy_type == 0) {
+                        is_blocked = intersect_obb(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
+                    } else if (proxy.proxy_type == 1) {
+                        is_blocked = intersect_superquadric(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
+                    } else if (proxy.proxy_type == 2 && mesh_triangles) {
+                        is_blocked = intersect_mesh(p_bias, L_dir, mesh_triangles, proxy.num_triangles, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
+                    } else if (proxy.proxy_type == 3) {
+                        is_blocked = intersect_sphere(p_bias, L_dir, proxy, t_hit, dummy_n) && (t_hit > 1e-3f) && (t_hit < dist - 1e-3f);
+                    }
+
+                    // Occlusion by receiver geometry (cyclorama cove self-shadowing)
+                    if (!is_blocked && receiver.receiver_type == 1) {
+                        float t_rec_hit = 1e9f;
+                        bool hit_rec_shadow = intersect_cyclorama(p_bias, L_dir, receiver, t_rec_hit, dummy_n);
+                        if (hit_rec_shadow && t_rec_hit > 1e-3f && t_rec_hit < dist - 1e-3f) {
+                            is_blocked = true;
+                        }
+                    }
                 }
-                if (hit_rec_shadow && t_rec_hit > 1e-3f && t_rec_hit < dist - 1e-3f) {
-                    is_blocked = true;
+
+                if (!is_blocked) {
+                    vis_acc_li += 1.0f;
                 }
-            }
 
-            if (!is_blocked) {
-                vis_acc += 1.0f;
+                float geom_factor = (cos_surf * cos_light) / dist_sq;
+                irr_acc_li += emitter_radiance * (geom_factor * (area / float(grid_dim * grid_dim)));
             }
-
-            float geom_factor = (cos_surf * cos_light) / dist_sq;
-            irr_acc += emitter_radiance * (geom_factor * (area / float(grid_dim * grid_dim)));
         }
-    }
 
-    float visibility = vis_acc / float(grid_dim * grid_dim);
-    out_irradiance[idx] = packed_float3(irr_acc.x, irr_acc.y, irr_acc.z);
+        float vis_li = vis_acc_li / float(grid_dim * grid_dim);
+        total_unshadowed_irr += irr_acc_li;
+        total_illuminated_irr += irr_acc_li * vis_li;
+    }
 
     // 4. Contact Occlusion on Receiver
     if (is_receiver) {
@@ -597,11 +610,16 @@ kernel void render_hybrid_studio_kernel(
             float contact_weight = clamp(1.0f - (dist_to_edge / r_contact), 0.0f, 1.0f);
             float contact_att = contact_weight * contact_weight * (3.0f - 2.0f * contact_weight);
             float c_contact = 1.0f - 0.95f * contact_att;
-            visibility = min(visibility, c_contact);
+            total_illuminated_irr *= c_contact;
         }
     }
 
-    out_visibility[idx] = visibility;
+    out_irradiance[idx] = packed_float3(total_unshadowed_irr.x, total_unshadowed_irr.y, total_unshadowed_irr.z);
+
+    float unshadowed_luma = 0.2126f * total_unshadowed_irr.x + 0.7152f * total_unshadowed_irr.y + 0.0722f * total_unshadowed_irr.z;
+    float illuminated_luma = 0.2126f * total_illuminated_irr.x + 0.7152f * total_illuminated_irr.y + 0.0722f * total_illuminated_irr.z;
+    float composite_visibility = (unshadowed_luma > 1e-5f) ? clamp(illuminated_luma / max(unshadowed_luma, 1e-5f), 0.0f, 1.0f) : 1.0f;
+    out_visibility[idx] = composite_visibility;
 
     // 5. Non-Destructive Linear Reconstruction & Protected Mask Pass-through
     if (has_protected_mask != 0 && protected_mask[idx] != 0) {
@@ -609,10 +627,10 @@ kernel void render_hybrid_studio_kernel(
         return;
     }
 
-    // Direct linear relighting: Y_relit = Y_orig * (irr * vis + ambient)
+    // Direct linear relighting: Y_relit = Y_orig * (total_illuminated_irr + ambient)
     float3 orig_srgb = float3(image_orig_srgb[idx]);
     float3 orig_lin = pow(orig_srgb, 2.2f);
-    float3 relit_lin = orig_lin * (irr_acc * visibility + 0.15f);
+    float3 relit_lin = orig_lin * (total_illuminated_irr + 0.15f);
     float3 relit_srgb = clamp(pow(relit_lin, 1.0f / 2.2f), 0.0f, 1.0f);
     out_relit_srgb[idx] = packed_float3(relit_srgb.x, relit_srgb.y, relit_srgb.z);
 }

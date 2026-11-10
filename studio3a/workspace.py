@@ -151,10 +151,9 @@ def render_virtual_studio_viewport(
     if v_cam and v_tgt:
         cv2.line(canvas, p_cam, p_tgt, (120, 120, 0), 1, cv2.LINE_AA)
         
-    # 5. Draw Rectangular Area Light Emitter (Bright Orange / Yellow Quad)
+    # 5. Draw Rectangular Area Light Emitters (Active in vibrant Gold/Cyan, Inactive in Orange, Disabled in Dim Outline)
+    active_id = scene.active_light_id or (scene.lights[0].id if scene.lights else None)
     for light in scene.lights:
-        if not light.enabled:
-            continue
         l_pos = np.array(light.position, dtype=np.float32)
         l_obj = RectangularAreaLight(
             position=light.position,
@@ -176,24 +175,44 @@ def render_virtual_studio_viewport(
         c_vis = [to_screen(pt)[1] for pt in corners_3d]
         
         if all(c_vis):
+            is_active = (light.id == active_id)
             pts_poly = np.array(c_screen, dtype=np.int32).reshape((-1, 1, 2))
-            cv2.fillPoly(canvas, [pts_poly], (40, 140, 255))
-            cv2.polylines(canvas, [pts_poly], True, (0, 220, 255), 2, cv2.LINE_AA)
             
+            if not light.enabled:
+                # Dim gray wireframe outline for disabled lights
+                cv2.polylines(canvas, [pts_poly], True, (80, 80, 80), 1, cv2.LINE_AA)
+                fill_color = None
+                border_color = (100, 100, 100)
+            elif is_active:
+                # Active light: vibrant gold / yellow fill with bright cyan border
+                cv2.fillPoly(canvas, [pts_poly], (20, 180, 255))
+                cv2.polylines(canvas, [pts_poly], True, (0, 255, 255), 2, cv2.LINE_AA)
+                border_color = (0, 255, 255)
+            else:
+                # Inactive enabled light: standard orange quad
+                cv2.fillPoly(canvas, [pts_poly], (40, 100, 200))
+                cv2.polylines(canvas, [pts_poly], True, (60, 160, 255), 1, cv2.LINE_AA)
+                border_color = (60, 160, 255)
+                
             # Normal pointer arrow pointing away from front emitter face
-            norm_tip = l_pos + l_obj.normal * 0.40
-            p_tip, v_tip = to_screen(norm_tip)
-            p_ctr, v_ctr = to_screen(l_pos)
-            if v_tip and v_ctr:
-                cv2.arrowedLine(canvas, p_ctr, p_tip, (0, 255, 255), 2, cv2.LINE_AA, tipLength=0.3)
+            if light.enabled:
+                norm_tip = l_pos + l_obj.normal * 0.40
+                p_tip, v_tip = to_screen(norm_tip)
+                p_ctr, v_ctr = to_screen(l_pos)
+                if v_tip and v_ctr:
+                    arrow_col = (0, 255, 255) if is_active else (60, 160, 255)
+                    cv2.arrowedLine(canvas, p_ctr, p_tip, arrow_col, 2 if is_active else 1, cv2.LINE_AA, tipLength=0.3)
                 
             p_label = c_screen[0]
-            cv2.putText(canvas, f"{light.name} ({light.width:.1f}x{light.height:.1f}m)",
-                        (p_label[0], p_label[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 220, 255), 1)
+            prefix = "[ACTIVE] " if is_active else ""
+            status_tag = "" if light.enabled else " [OFF]"
+            label_text = f"{prefix}{light.name} ({light.width:.1f}x{light.height:.1f}m){status_tag}"
+            cv2.putText(canvas, label_text,
+                        (p_label[0], p_label[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.38, border_color, 1)
 
     # Add overlay legend
     cv2.putText(canvas, "3D VIRTUAL STUDIO STAGE", (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
-    cv2.putText(canvas, f"Proxy: {scene.subject.proxy_type.value} | Receiver: {scene.receiver.receiver_type.value}",
+    cv2.putText(canvas, f"Lights: {len(scene.lights)} | Proxy: {scene.subject.proxy_type.value} | Receiver: {scene.receiver.receiver_type.value}",
                 (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (150, 150, 150), 1)
     return canvas
 
@@ -298,17 +317,67 @@ class StudioWorkspaceSession:
         
         return render_output
 
+    def select_light(self, light_id: str) -> Dict[str, Any]:
+        """Selects the active light in the studio."""
+        scene = self.state_manager.current_scene
+        scene.select_light(light_id)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def add_light(self, light: Optional[AreaLightData] = None) -> Dict[str, Any]:
+        """Adds a new light to the studio scene and selects it."""
+        scene = self.state_manager.current_scene
+        scene.add_light(light)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def remove_light(self, light_id: str) -> Dict[str, Any]:
+        """Removes a light from the scene."""
+        scene = self.state_manager.current_scene
+        scene.remove_light(light_id)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def duplicate_light(self, light_id: str) -> Dict[str, Any]:
+        """Duplicates an existing light with an offset position."""
+        scene = self.state_manager.current_scene
+        scene.duplicate_light(light_id)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def toggle_light(self, light_id: str, enabled: Optional[bool] = None) -> Dict[str, Any]:
+        """Toggles active emission for a specific light."""
+        scene = self.state_manager.current_scene
+        scene.toggle_light(light_id, enabled=enabled)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
+    def toggle_light_shadows(self, light_id: str, cast_shadows: Optional[bool] = None) -> Dict[str, Any]:
+        """Toggles shadow ray tracing for a specific light."""
+        scene = self.state_manager.current_scene
+        scene.toggle_light_shadows(light_id, cast_shadows=cast_shadows)
+        self.state_manager.push_state(scene)
+        return self.execute_render(quality=RenderQuality.PREVIEW)
+
     def update_light_params(
         self,
         pos_x: float, pos_y: float, pos_z: float,
         pitch: float, yaw: float, roll: float,
         width: float, height: float,
         intensity: float, temp_k: float,
-        convention: str
+        convention: str,
+        light_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Artist manipulation action: updates area light parameters."""
         scene = self.state_manager.current_scene
-        light = scene.lights[0]
+        if light_id:
+            light = scene.get_light(light_id)
+            if light is None:
+                raise ValueError(f"Light '{light_id}' not found.")
+            scene.active_light_id = light_id
+        else:
+            light = scene.get_active_light()
+
         light.position = [float(pos_x), float(pos_y), float(pos_z)]
         light.rotation_deg = [float(pitch), float(yaw), float(roll)]
         light.width = max(0.05, float(width))
