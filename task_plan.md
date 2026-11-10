@@ -1,126 +1,90 @@
-# RS-SPIKE-3C.3 Task Plan: Image-Based Lighting & Studio Reflection Probes
+# RS-PRODUCT-1.0 Task Plan: Artist-Controlled Virtual Lighting Studio
 
-**Role:** Principal Rendering Engineer, Physically Based Rendering Researcher, Metal GPU Engineer, Computational Photography Architect, and Independent Validation Lead.  
-**Starting Checkpoint:** `3d6cee7` (Phase 0 Remediation Complete)  
-**Branch:** `feature/RS-SPIKE-3C.3-ibl-reflection-probes`  
-**Platform:** macOS / Apple Silicon / Metal 3  
-**Execution Standard:** Evidence-first engineering. Ground-truth physical verification before implementation. Preservation of original photograph integrity and non-destructive Two-Scale reconstruction.
+**Role:** Principal macOS Application Architect, Staff Rendering Engineer, Senior Interaction Designer, Metal Engineer, Product Designer, Technical Project Lead  
+**Product:** Relight Studio  
+**Primary Milestone:** RS-PRODUCT-1.0 — Studio Workspace  
+**Baseline Checkpoint:** `9ad1118` (RS-SPIKE-3C.3 completed)  
+**Branch:** `feature/RS-PRODUCT-1.0-studio-workspace`  
+**Platform:** macOS / Apple Silicon  
+**Execution Standard:** Evidence-first engineering. Ground truth verification. Real application architecture with zero mock data. Professional studio UI with non-destructive guarantees.
 
 ---
 
-## Phase 0: Baseline & Repository Verification
-- [x] 0.1 Inspect complete repository, Git state, and active branch (`feature/RS-SPIKE-3C.3-ibl-reflection-probes` at `3d6cee7`).
-- [x] 0.2 Inspect the GGX denominator fix in `studio3a/brdf.py` and `metal2/shaders/renderer.metal`.
-- [x] 0.3 Trace production rendering path from `StudioScene` through `RenderBackend` / `MetalRenderBackend` to final reconstructed image.
-- [x] 0.4 Audit existing material (`MaterialData`), light (`AreaLightData`), camera, geometry, and reconstruction structures.
-- [x] 0.5 Check for existing environment abstractions or prior IBL attempts.
-- [x] 0.6 Reproduce baseline measurements (test suite, benchmarks, performance).
-- [x] 0.7 Deliverable: Author `RS_SPIKE_3C_3_BASELINE_AUDIT.md`.
+## Phase 0: Repository Discovery & Architecture Audit
+- [ ] 0.1 Deep inspection of existing repository: Metal pipeline, scene models, workspace controller, camera, geometry, lighting, materials, environment, reconstruction, and test suites.
+- [ ] 0.2 Author `RS_PRODUCT_1_0_ARCHITECTURE_AUDIT.md`: Document current architecture, reusable components, missing application infrastructure, state management, persistence, performance constraints, and technical risks.
+- [ ] 0.3 Author `RS_PRODUCT_1_0_IMPLEMENTATION_PLAN.md`: Document execution sequence, component dependencies, and acceptance criteria.
 
-## Phase A: Controlled IBL Reference Experiment
-- [x] A.1 Create a controlled synthetic environment map with distinct features:
-  - High-intensity bright region (studio softbox / key light).
-  - Low-intensity dark region.
-  - Neutral / midtone studio bounce.
-  - Tinted / colored accent feature.
-  - High-contrast edge boundary.
-- [x] A.2 Establish controlled reference scene:
-  - 1 metallic sphere ($m=1.0, F_0=1.0$).
-  - 1 dielectric sphere ($m=0.0, F_0=0.04$).
-  - Fixed camera, fixed exposure, no direct lights.
-- [x] A.3 Material test matrix: roughness $r \in [0.04, 0.10, 0.25, 0.50, 1.00]$ for both metallic and dielectric.
-- [x] A.4 Construct independent, high-sample Monte Carlo reference implementation:
-  - Cosine-weighted hemisphere integration for diffuse irradiance.
-  - GGX importance sampling over hemisphere for specular reflection.
-  - Demonstrate numerical convergence across sample counts ($N = 64, 256, 1024, 4096, 16384$).
-- [x] A.5 Validate acceptance criteria:
-  - Sharpness decreases monotonically with increasing roughness.
-  - No energy amplification ($R(V) \le 1.0$).
-  - No black pixels / coordinate lookup singularities.
-  - No seam discontinuities at $\phi = 0/2\pi$ or poles $\theta = 0/\pi$.
-  - Stability at $r = 0.04$.
-- [x] A.6 Deliverable: Author `RS_SPIKE_3C_3_PHASE_A_REFERENCE.md` with rendered images, convergence graphs, and error metrics.
+## Phase 1: Bounded Rendering Readiness Verification (RS-SPIKE-3C.3.1)
+- [ ] 1.1 Verify GGX remediation remains intact.
+- [ ] 1.2 Verify environment lighting CPU–Metal parity.
+- [ ] 1.3 Verify existing E.1 guided-filter reconstruction path remains functional.
+- [ ] 1.4 Verify direct + environment illumination energy conservation ($k_d + F_0 \le 1.0$) and non-double-counting additivity.
+- [ ] 1.5 Verify protected-region zero-mutation ($0.0000000000$).
+- [ ] 1.6 Audit photographic comparison boards and 1080p host wall-clock latency characteristics.
+- [ ] 1.7 Author `RS_PRODUCT_1_0_RENDERING_READINESS.md`.
 
-## Phase B: Environment Representation & Precomputation Architecture
-- [x] B.1 Select and justify environment representation:
-  - Equirectangular format (2:1 aspect ratio, linear float32 HDR).
-  - Radiance environment map representation.
-  - Diffuse irradiance map representation (precomputed / numerical).
-  - Specular prefiltered reflection map (Karis / Epic Games split-sum approximation with GGX roughness mips).
-  - Preintegrated BRDF LUT ($256 \times 256$ float32 texture for $N \cdot V$ vs Roughness).
-- [x] B.2 Define linear color space, HDR radiometric units, and exposure conventions.
-- [x] B.3 Implement environment map loading, validation, and prefiltering generator in Python.
-- [x] B.4 Add unit tests for environment map coordinates, sampling, and prefiltering.
+## Phase 2: RS-PRODUCT-1.0A — Core Application Architecture & Studio Workspace
+- [ ] 2.1 Design and implement application package structure (`relight_studio/`):
+  - Application controller (`relight_studio/controller.py`)
+  - Project management & `.relight` bundle specification (`relight_studio/project.py`)
+  - Rendering orchestrator with async worker and stale-frame cancellation (`relight_studio/orchestrator.py`)
+  - Workspace UI server / client architecture (`relight_studio/server.py` & web assets)
+- [ ] 2.2 Build the professional Dark Studio UI:
+  - Photograph Viewport (Zoom, pan, fit-to-screen, before/after wipe, mode selection, live preview)
+  - 3D Virtual Studio Viewport (Camera orbit/pan/zoom, ground/cove grid, subject proxy, area lights, selection & gizmo)
+  - Scene Hierarchy Panel (Tree view, object selection, rename, toggle visibility, add/remove lights)
+  - Context Inspector Panel (Exact parameter controls for Light, Material, Environment, Camera, Project)
 
-## Phase C: Metal GPU Implementation
-- [x] C.1 Extend `metal2/shaders/renderer.metal`:
-  - Add prefiltered specular environment sampling with GGX mip selection.
-  - Add 2D BRDF LUT sampling (`brdf_lut`).
-  - Add diffuse irradiance environment sampling.
-  - Combine environment diffuse: $k_d \cdot c_{\text{diff}} \cdot E_{\text{diffuse}}$.
-  - Combine environment specular: $(F_0 \cdot \text{scale} + \text{bias}) \cdot L_{\text{prefiltered}}$.
-- [x] C.2 Extend `metal2/src/metal_bridge.mm` and `metal2/src/metal_bridge.h`:
-  - Texture/buffer bindings for environment irradiance map, prefiltered maps, and BRDF LUT.
-  - Persistent Metal buffer allocations in steady state.
-  - Extend uniform buffer for environment parameters (`CEnvironmentParams`).
-- [x] C.3 Extend Python bridge `metal2/bridge.py` and `metal2/renderer.py` to support environment data.
-- [x] C.4 Extend CPU reference renderer in `studio3a/renderer.py` for exact mathematical parity.
-- [x] C.5 Verify CPU–Metal parity for environment illumination ($\text{MAE} < 0.005$).
+## Phase 3: RS-PRODUCT-1.0B — Photograph & Project Workflow
+- [ ] 3.1 Implement Project Creation, Photograph Import, and Metadata Extraction:
+  - Support standard photographic formats (JPEG, PNG, TIFF, WebP).
+  - Extract dimensions, color profiles, and maintain immutable source references.
+  - Implement project bundle format (`.relight` bundle with `project.json` and asset links).
+- [ ] 3.2 Implement Save, Load, and Recent Projects:
+  - Serialize full authoritative scene state, camera, proxy, receiver, lights, materials, environment, render settings.
+  - Non-destructive image guarantees: original photograph is never modified.
+  - Reopen and deterministic reload validation.
 
-## Phase D: Direct Light + IBL Energy Accounting
-- [x] D.1 Formulate rigorous radiometric balance:
-  - Direct Diffuse + Direct Specular + Environment Diffuse + Environment Specular.
-  - Single-scattering energy conservation: $k_d = (1 - F) \cdot (1 - \text{metallic})$.
-- [x] D.2 Test configurations:
-  - Environment only.
-  - 1 direct light only.
-  - Environment + 1 direct light.
-  - Environment + 4 direct lights.
-  - Environment + 8 direct lights.
-- [x] D.3 Verify energy bounds under multi-light + IBL illumination (no unintended doubling).
+## Phase 4: RS-PRODUCT-1.0C — Scene & Interaction Integration
+- [ ] 4.1 Unify Authoritative Scene State between 3D Viewport, Photograph Viewport, Scene Tree, and Inspector.
+- [ ] 4.2 Implement Light Selection and Interactive Manipulation:
+  - Click-to-select in 3D viewport and scene hierarchy.
+  - Interactive transform gizmo (Translate X/Y/Z, Rotate Pitch/Yaw/Roll, Scale Width/Height).
+  - Multi-light management: Add new light, duplicate light, remove light, toggle emission, toggle shadow.
+- [ ] 4.3 Implement Transactional Undo / Redo:
+  - Multi-level history stack with state diffing and deterministic replay.
 
-## Phase E: Relight Studio Photographic Integration
-- [x] E.1 Integrate IBL into Two-Scale Photographic Reconstruction:
-  - Diffuse transport: $\mathbf{L}_{\text{diffuse, total}} = \mathbf{L}_{\text{direct, diff}} + \mathbf{L}_{\text{env, diff}}$.
-  - Guided filter applies to combined diffuse ratio.
-  - Specular transport: $\mathbf{L}_{\text{specular, total}} = \mathbf{L}_{\text{direct, spec}} + \mathbf{L}_{\text{env, spec}}$.
-  - Additive specular highlight overlay with C3 Oklab gamut compression.
-- [x] E.2 Evaluate on photographic test plates:
-  - Plate P1: Nike sneaker.
-  - Plate P2: Classical statue.
-  - Plate P3: Architectural relief.
-- [x] E.3 Measure foreground DCI, background DCI, whole-image DCI, and protected-region zero-mutation.
-- [x] E.4 Verify zero modification to unmasked background and strict identity preservation.
+## Phase 5: RS-PRODUCT-1.0D — Live Rendering Integration
+- [ ] 5.1 Connect Metal GPU pipeline (`MetalRenderBackend`) with CPU fallback (`RenderBackend`).
+- [ ] 5.2 Implement Dual-Mode Rendering:
+  - Interactive Preview Mode: Responsive 1024x576 rendering at high frame rates.
+  - Final Quality Mode: Full resolution, high-sample Monte Carlo, deterministic export.
+- [ ] 5.3 Implement Render Queue & Stale-Frame Cancellation:
+  - Ensure fast mouse dragging generates smooth previews without request backlogs.
+  - Discard outdated intermediate frames asynchronously.
 
-## Phase F: Uncertainty Supervisor & Artist Controls
-- [x] F.1 Integrate environment parameters into `StudioScene`:
-  - `EnvironmentData`: `enabled`, `asset_id`, `intensity`, `rotation_deg`, `diffuse_weight`, `specular_weight`.
-  - Schema migration and JSON serialization round-trip.
-  - Undo/redo stack preservation.
-- [x] F.2 Integrate with Uncertainty Supervisor:
-  - Distinguish known HDR, user-provided, estimated SDR, and missing environment info.
-  - Prevent fabrication of missing environment data as ground truth.
-- [x] F.3 Author comprehensive test suite in `tests/RS-SPIKE-3C.3/`.
-
-## Phase G: Validation, Performance & Reporting
-- [x] G.1 Execute full regression suite (historical + new spike): 118/118 passing.
-- [x] G.2 Benchmark 1024x576 and 1920x1080 across 5 configurations.
-- [x] G.3 Produce all 5 authoritative milestone markdown deliverables.
-- [x] G.4 Produce high-resolution diagnostic visual comparison boards.
-  - Flag environment reflection reliability based on surface normal visibility and proxy distance.
-  - Prevent deceptive "ground truth" claims for unmeasured environment detail.
-
-## Phase G: Validation, Performance & Deliverables
-- [ ] G.1 Run full regression suite across repository (all existing + new tests).
-- [ ] G.2 Perform comprehensive hardware performance benchmarks on Apple Silicon M5 GPU:
-  - 576p and 1080p preview & final quality.
-  - Zero heap allocation verification across steady frames.
-  - Accurate latency, FPS, and bottleneck analysis.
-- [ ] G.3 Author all required deliverables:
-  - `RS_SPIKE_3C_3_BASELINE_AUDIT.md`
-  - `RS_SPIKE_3C_3_PHASE_A_REFERENCE.md`
-  - `RS_SPIKE_3C_3_IMPLEMENTATION_REPORT.md`
-  - `RS_SPIKE_3C_3_VALIDATION_REPORT.md`
-  - `RS_SPIKE_3C_3_PERFORMANCE_REPORT.md`
-  - Visual comparison boards and reference comparison images.
-- [ ] G.4 Conclude with final engineering verdict (PASS / CONDITIONAL PASS / FAIL).
+## Phase 6: RS-PRODUCT-1.0E — Validation, Testing & Deliverables
+- [ ] 6.1 Author comprehensive automated test suite (`tests/RS-PRODUCT-1.0/`):
+  - Application architecture & state tests
+  - Project workflow & serialization tests
+  - Interaction & gizmo tests
+  - Live rendering & async orchestrator tests
+  - Non-destructive image preservation tests
+- [ ] 6.2 Capture visual screenshots of all 10 required states:
+  1. Empty application workspace
+  2. New project
+  3. Imported photograph
+  4. Photograph viewport
+  5. 3D scene viewport
+  6. Scene hierarchy
+  7. Light inspector
+  8. Light selection and transformation
+  9. Relit photograph
+  10. Saved and reopened project
+- [ ] 6.3 Benchmark application responsiveness, end-to-end latency, and memory stability.
+- [ ] 6.4 Author remaining reports:
+  - `RS_PRODUCT_1_0_IMPLEMENTATION_REPORT.md`
+  - `RS_PRODUCT_1_0_VALIDATION_REPORT.md`
+  - `RS_PRODUCT_1_0_PERFORMANCE_REPORT.md`
+- [ ] 6.5 Deliver final milestone summary and verdict.

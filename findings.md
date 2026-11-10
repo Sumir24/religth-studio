@@ -1,15 +1,12 @@
-# Findings & Discoveries: Relight Studio Architecture
+# RS-PRODUCT-1.0 Findings & Architectural Notes
 
-## Key Discoveries from v4
-1. **Polar Placement is Ergonomically Superior:**
-   Photographers think in clock dial (azimuth $0^\circ = \text{top}$, $90^\circ = \text{right}$) and elevation ($-90^\circ$ back to $+90^\circ$ front).
-2. **Silhouette Normal Bending Works:**
-   Distance-transform gradient $\nabla d$ points inward; outward vector $-\nabla d$ successfully bends $N_z \to 0$ at the silhouette, making rim lighting possible.
-3. **Masked Guided Filter Prevents Halos:**
-   Normalizing partitions $m$ and $1 - m$ independently prevents ratio bleeding.
-4. **V4 Remaining Bottlenecks (Opportunities for v5):**
-   - **Static Assumption of $S_{\text{old}}$:** v4 assumes original light was flat directional or uniform ambient. In real photos with baked directional light (e.g. sunlight from upper-left), changing light to upper-right fights the existing shadows. Estimating the original light vector enables shadow neutralization.
-   - **Uniform Material Gloss:** In v4, gloss is a single scalar per image unless an external map is provided. Natural objects have mixed materials (e.g., shoe has matte mesh, satin leather, glossy plastic swoosh, rubber sole). We can infer spatially-varying roughness and specular reflectance directly from high-frequency texture variance and chromatic saturation.
-   - **Micro-Relief Angle Invariance:** In v4, micro-detail $Y_d$ is scaled only by $R^\lambda$. Real physical micro-relief casts raking micro-shadows when light is grazing ($N \cdot L \to 0$).
-   - **Crevice Ambient Occlusion:** Deep recesses (grooves in soles, eye sockets in statues) should be dark even when soft diffuse fill is applied.
-
+## Discovery & Existing Assets
+- **Rendering Foundation:** Complete Cook-Torrance GGX microfacet specular BRDF, multi-light additive transport, Karis split-sum Image-Based Lighting (diffuse irradiance + prefiltered specular + 2D BRDF LUT), E.1 guided-filter photographic reconstruction, and C3 Oklab gamut mapping.
+- **Metal Acceleration:** `metal2/libmetal2.dylib` compiled and functioning via `metal2/bridge.py` and `metal2/renderer.py`. Pure GPU kernel time at $1024 \times 576$ is $1.82 - 2.41\,\text{ms}$ ($400+\,\text{FPS}$).
+- **Historical Workspace:** `studio3a/workspace.py` provided a basic prototype using Gradio 6. However, Gradio has rigid web-form layouts and lacks professional creative application interaction (e.g. smooth mouse-drag 3D orbit/pan/zoom, interactive 3D transform gizmos, responsive dockable panels, bespoke dark studio aesthetic).
+- **Installed Runtime:** Python 3.14.6 with FastAPI, Starlette, Uvicorn, Pillow, OpenCV, NumPy, Torch, Pytest. Google Chrome 157 is installed locally on macOS.
+- **Application Architecture Decision:**
+  - Create a production-grade macOS studio application package `relight_studio/`.
+  - Architecture: Application UI (HTML5/Canvas/WebGL dark studio workspace with interactive 3D gizmos, viewport zoom/pan/wipe) <-> StudioAppController <-> Authoritative Scene State (SceneStateManager) <-> RenderingOrchestrator (async executor with background worker, request cancellation, and stale-frame suppression) <-> MetalRenderBackend / RenderBackend.
+  - Native launch via `python -m relight_studio` or CLI entry point, served over high-performance local async HTTP/WebSocket, capable of running in browser or standalone app window.
+  - Full screenshot capture pipeline using headless Chrome to produce verified, high-resolution visual evidence of all 10 application states.
