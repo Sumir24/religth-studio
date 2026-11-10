@@ -131,9 +131,9 @@ inline float eval_sq_inside_outside(float3 p, float3 radii, float2 sq_e) {
     float e2 = max(sq_e.y, 0.05f);
     
     float p_xy = pow(nx, 2.0f / e2) + pow(ny, 2.0f / e2);
-    float term_xy = pow(p_xy, e2 / e1);
-    float term_z = pow(nz, 2.0f / e1);
-    return term_xy + term_z - 1.0f;
+    float val = pow(max(p_xy, 1e-6f), e2 / e1) + pow(nz, 2.0f / e1);
+    float rho = pow(max(val, 1e-6f), e1 * 0.5f);
+    return rho - 1.0f;
 }
 
 inline bool intersect_superquadric(
@@ -160,8 +160,8 @@ inline bool intersect_superquadric(
     float t_exit = -b + sqrt_disc;
     if (t_exit < 1e-4f) return false;
 
-    // Interval search
-    const int N_STEPS = 24;
+    // 32-step interval search
+    const int N_STEPS = 32;
     float dt = (t_exit - t_enter) / float(N_STEPS);
     float t_curr = t_enter;
     float f_prev = eval_sq_inside_outside(ro_local + t_curr * rd_local, radii, sq_e);
@@ -169,10 +169,26 @@ inline bool intersect_superquadric(
     for (int i = 0; i < N_STEPS; ++i) {
         float t_next = t_curr + dt;
         float f_next = eval_sq_inside_outside(ro_local + t_next * rd_local, radii, sq_e);
-        if (f_prev * f_next <= 0.0f) {
-            // Root bracket found, linear refine
-            float denom = f_prev - f_next;
-            float t_root = (fabs(denom) > 1e-6f) ? (t_curr + f_prev * dt / denom) : t_curr;
+        if (f_prev > 0.0f && f_next <= 0.0f) {
+            // Root bracket [t_curr, t_next] found
+            float ta = t_curr;
+            float tb = t_next;
+            // 4 bisection steps for guaranteed interval reduction (factor of 16)
+            for (int k = 0; k < 4; ++k) {
+                float t_mid = 0.5f * (ta + tb);
+                float f_mid = eval_sq_inside_outside(ro_local + t_mid * rd_local, radii, sq_e);
+                if (f_mid > 0.0f) {
+                    ta = t_mid;
+                } else {
+                    tb = t_mid;
+                }
+            }
+            // 1 safe secant refinement step on normalized metric
+            float fa = eval_sq_inside_outside(ro_local + ta * rd_local, radii, sq_e);
+            float fb = eval_sq_inside_outside(ro_local + tb * rd_local, radii, sq_e);
+            float denom = fb - fa;
+            float t_root = (fabs(denom) > 1e-6f) ? (ta - fa * (tb - ta) / denom) : ta;
+            t_root = clamp(t_root, min(ta, tb), max(ta, tb));
             out_t = t_root;
             
             // Gradient normal
@@ -322,8 +338,8 @@ inline bool intersect_cyclorama(
                 if (tc > 1e-4f && tc < best_t) {
                     float py = ray_o.y + tc * ray_d.y;
                     float pz = ray_o.z + tc * ray_d.z;
-                    if (py >= rec.ground_y && py <= rec.cove_center_yz.x &&
-                        pz >= rec.wall_z && pz <= rec.cove_center_yz.y) {
+                    if (py >= rec.ground_y - 1e-4f && py <= rec.cove_center_yz.x + 1e-4f &&
+                        pz >= rec.wall_z - 1e-4f && pz <= rec.cove_center_yz.y + 1e-4f) {
                         best_t = tc;
                         float3 cyl_n = normalize(float3(0.0f, -(py - rec.cove_center_yz.x), -(pz - rec.cove_center_yz.y)));
                         best_n = cyl_n;
@@ -515,11 +531,28 @@ kernel void render_hybrid_studio_kernel(
             float dist_to_edge = 0.0f;
             float3 p_rel = surface_pos - float3(proxy.position);
             float3 p_loc = mat3_transpose_mul_vec(proxy.rot_matrix, p_rel);
-            float hx = proxy.half_extents.x;
-            float hz = proxy.half_extents.z;
-            float dx = max(0.0f, fabs(p_loc.x) - hx);
-            float dz = max(0.0f, fabs(p_loc.z) - hz);
-            dist_to_edge = sqrt(dx * dx + dz * dz);
+
+            if (proxy.proxy_type == 1) {
+                // Superquadric: analytical superellipse boundary distance in horizontal XZ plane
+                float rx = proxy.half_extents.x;
+                float rz = proxy.half_extents.z;
+                float e2 = max(proxy.sq_exponents.y, 0.05f);
+                float theta = atan2(p_loc.z, p_loc.x);
+                float cos_t = cos(theta);
+                float sin_t = sin(theta);
+                float xb = rx * sign(cos_t) * pow(fabs(cos_t), 2.0f / e2);
+                float zb = rz * sign(sin_t) * pow(fabs(sin_t), 2.0f / e2);
+                float d_pts = sqrt(p_loc.x * p_loc.x + p_loc.z * p_loc.z);
+                float d_bnd = sqrt(xb * xb + zb * zb);
+                dist_to_edge = max(0.0f, d_pts - d_bnd);
+            } else {
+                // OBB & default: 2D box boundary distance
+                float hx = proxy.half_extents.x;
+                float hz = proxy.half_extents.z;
+                float dx = max(0.0f, fabs(p_loc.x) - hx);
+                float dz = max(0.0f, fabs(p_loc.z) - hz);
+                dist_to_edge = sqrt(dx * dx + dz * dz);
+            }
 
             float r_contact = 0.08f;
             float contact_weight = clamp(1.0f - (dist_to_edge / r_contact), 0.0f, 1.0f);

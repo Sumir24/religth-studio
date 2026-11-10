@@ -96,3 +96,4 @@ To ensure GPU kernel timings are not confused with actual product responsiveness
    For all analytical proxies (OBB, Superquadrics), even full 1080p renders execute in **$8.85\,\text{ms}$ total wall time** (>100 FPS).
 3. **Identified Bottleneck for Mesh:**  
    Testing 280 triangles for every ray at 1080p causes $9.29$ Billion Möller-Trumbore iterations. Introducing bounding AABB culling on GPU (skipping triangles when the ray misses the mesh AABB) will accelerate mesh shadow passes by $\sim 80\%$.
+

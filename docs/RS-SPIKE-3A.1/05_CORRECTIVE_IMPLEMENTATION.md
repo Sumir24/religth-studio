@@ -217,3 +217,4 @@ Direct parity comparison of Metal vs authoritative CPU Reference Renderer on M2_
 - Continuous Soft IoU: **$0.8602$** (Gate $\ge 0.85$)
 - Penumbra Area Ratio: **$1.0281$** ($2.8\%$ area parity)
 - Direct Irradiance MAE: **$0.000414$**
+

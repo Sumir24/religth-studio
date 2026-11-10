@@ -104,3 +104,4 @@ The RS-METAL-2 report's claims of **hardware execution feasibility**, **zero pro
 However, the reported **shadow SDE and IoU figures were corrupted by a camera up-vector bug and an asymmetric benchmark fixture**, and the **Oklab speedup figure was measured on a placeholder kernel**.
 
 With these issues identified, Milestone **RS-SPIKE-3A.1** will execute the required mathematical repairs, continuous metric reform, and benchmark reconciliation.
+

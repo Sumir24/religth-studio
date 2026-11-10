@@ -96,3 +96,4 @@ Errors are categorized into six distinct domains:
 The shadow fidelity issues in RS-METAL-2 were not inherent limitations of 2.5D geometric transport or native Metal shaders. They were traceable to three specific defects: **the camera up-vector mismatch**, **mesh proxy scale packing**, and **an asymmetric ground-truth benchmark harness**.
 
 Once corrected, native Metal achieves **sub-pixel shadow centroid accuracy ($\text{SDE} = 0.33 - 1.77\,\text{px}$)** and **$>90 - 98\%$ IoU** against the authoritative CPU reference.
+

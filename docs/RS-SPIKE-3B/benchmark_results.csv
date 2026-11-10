@@ -1,0 +1,7 @@
+case_id,proxy_type,receiver_type,soft_iou,gate_soft_iou,sde_px,gate_sde,contour_disp_px,penumbra_mae,irradiance_mae,gate_irradiance,zero_mutation_diff,gate_zero_mutation,replay_diff,gate_replay,preview_gpu_p50_ms,preview_gpu_p95_ms,final_gpu_p50_ms,final_gpu_p95_ms,gate_latency
+M2_01_perfume_box_plane,OBB,PLANE,1.0,PASS,0.0,PASS,0.0,0.0,4.850769073527772e-06,PASS,0.0,PASS,0.0,PASS,0.13,0.14,1.17,1.18,PASS
+M2_02_perfume_box_cyclorama,OBB,CYCLORAMA,1.0,PASS,0.0,PASS,0.0,0.0,4.850769073527772e-06,PASS,0.0,PASS,0.0,PASS,0.05,0.17,0.48,1.68,PASS
+M2_03_cosmetic_bottle_cyclorama,SUPERQUADRIC,CYCLORAMA,1.0,PASS,0.0,PASS,0.0,0.0,1.1791867109423038e-05,PASS,0.0,PASS,0.0,PASS,0.1,0.38,1.25,4.09,PASS
+M2_04_sneaker_mesh_plane,MESH,PLANE,0.9115999937057495,PASS,1.99,PASS,0.16,0.1349,2.2477559468825348e-05,PASS,0.0,PASS,0.0,PASS,0.32,0.37,4.42,5.73,PASS
+M2_05_metallic_watch_plane,OBB,PLANE,1.0,PASS,0.0,PASS,0.0,0.0,5.694073024642421e-06,PASS,0.0,PASS,0.0,PASS,0.13,0.13,1.17,1.22,PASS
+M2_06_organic_sculpture_cyclorama,SUPERQUADRIC,CYCLORAMA,1.0,PASS,0.0,PASS,0.0,0.0,2.4966586352093145e-05,PASS,0.0,PASS,0.0,PASS,0.07,0.33,0.9,4.29,PASS

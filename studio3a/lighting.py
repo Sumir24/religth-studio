@@ -100,9 +100,17 @@ class RectangularAreaLight:
             # FIXED_POWER: intensity represents total flux Phi
             return (base_color * self.intensity) / max(self.area * math.pi, 1e-4)
 
-    def sample_emitter_points(self, n_samples: int = 16, seed: Optional[int] = None) -> np.ndarray:
+    def sample_emitter_points(
+        self,
+        n_samples: int = 16,
+        seed: Optional[int] = None,
+        stratified_centers: bool = True
+    ) -> np.ndarray:
         """
-        Generates stratified jittered sample points across the rectangular emitter quad.
+        Generates stratified sample points across the rectangular emitter quad.
+        By default (stratified_centers=True), evaluates deterministic cell centers
+        matching the Metal shader and eliminating temporal flickering during artist manipulation.
+        When stratified_centers=False and seed is provided, jitters within cells.
         Returns array of shape (n_samples, 3).
         """
         if seed is not None:
@@ -115,9 +123,12 @@ class RectangularAreaLight:
             for j in range(n_side):
                 if len(actual_samples) >= n_samples:
                     break
-                # Jitter within sub-cell [0, 1]
-                u = (i + np.random.uniform(0.1, 0.9)) / float(n_side) - 0.5
-                v = (j + np.random.uniform(0.1, 0.9)) / float(n_side) - 0.5
+                if stratified_centers:
+                    u = (float(i) + 0.5) / float(n_side) - 0.5
+                    v = (float(j) + 0.5) / float(n_side) - 0.5
+                else:
+                    u = (float(i) + np.random.uniform(0.1, 0.9)) / float(n_side) - 0.5
+                    v = (float(j) + np.random.uniform(0.1, 0.9)) / float(n_side) - 0.5
                 p = self.pos + (u * self.width) * self.u_tangent + (v * self.height) * self.v_bitangent
                 actual_samples.append(p)
                 

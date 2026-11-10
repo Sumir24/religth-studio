@@ -1,0 +1,147 @@
+{
+  "stratified_mc_convergence": {
+    "4": {
+      "mae": 0.002684702631086111,
+      "rmse": 0.0031314133666455746,
+      "max_err": 0.007033109664916992
+    },
+    "16": {
+      "mae": 0.0006605262169614434,
+      "rmse": 0.000768882455304265,
+      "max_err": 0.001720428466796875
+    },
+    "64": {
+      "mae": 0.00015711317246314138,
+      "rmse": 0.00018279845244251192,
+      "max_err": 0.0004088878631591797
+    },
+    "256": {
+      "mae": 3.1424398912349716e-05,
+      "rmse": 3.655862747109495e-05,
+      "max_err": 8.249282836914062e-05
+    }
+  },
+  "inverse_square_law": {
+    "distances": [
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      3.0,
+      4.0,
+      5.0
+    ],
+    "irradiances": [
+      0.4455590546131134,
+      0.11248202621936798,
+      0.05008301883935928,
+      0.028189653530716896,
+      0.01253444142639637,
+      0.007051747292280197,
+      0.004513450898230076
+    ],
+    "e_d2_products": [
+      0.11138976365327835,
+      0.11248202621936798,
+      0.11268679238855839,
+      0.11275861412286758,
+      0.11280997283756733,
+      0.11282795667648315,
+      0.1128362724557519
+    ],
+    "relative_deviation_far": 0.003149358597906536
+  },
+  "energy_convention_scaling": {
+    "fixed_power_ratio": 0.9926751483978862,
+    "fixed_radiance_ratio": 15.882799481476757,
+    "expected_radiance_ratio": 16.0
+  },
+  "kelvin_blackbody": {
+    "table": [
+      {
+        "kelvin": 2000,
+        "R": 2.5546,
+        "G": 0.6377,
+        "B": 0.0111,
+        "R_to_B_ratio": 229.5974
+      },
+      {
+        "kelvin": 2700,
+        "R": 2.0206,
+        "G": 0.7779,
+        "B": 0.1944,
+        "R_to_B_ratio": 10.392
+      },
+      {
+        "kelvin": 3200,
+        "R": 1.7601,
+        "G": 0.8398,
+        "B": 0.3493,
+        "R_to_B_ratio": 5.0382
+      },
+      {
+        "kelvin": 4000,
+        "R": 1.4691,
+        "G": 0.9049,
+        "B": 0.5608,
+        "R_to_B_ratio": 2.6196
+      },
+      {
+        "kelvin": 5000,
+        "R": 1.2314,
+        "G": 0.9555,
+        "B": 0.7595,
+        "R_to_B_ratio": 1.6214
+      },
+      {
+        "kelvin": 5600,
+        "R": 1.1285,
+        "G": 0.9767,
+        "B": 0.8522,
+        "R_to_B_ratio": 1.3243
+      },
+      {
+        "kelvin": 6500,
+        "R": 1.0089,
+        "G": 1.0009,
+        "B": 0.9648,
+        "R_to_B_ratio": 1.0457
+      },
+      {
+        "kelvin": 8000,
+        "R": 0.9161,
+        "G": 0.9983,
+        "B": 1.2642,
+        "R_to_B_ratio": 0.7246
+      },
+      {
+        "kelvin": 10000,
+        "R": 0.842,
+        "G": 1.0035,
+        "B": 1.4303,
+        "R_to_B_ratio": 0.5887
+      }
+    ],
+    "is_r_b_monotonic_decreasing": true
+  },
+  "penumbra_scaling": [
+    {
+      "emitter_width": 0.2,
+      "theoretical_penumbra_width": 0.1,
+      "measured_penumbra_width": 0.0902,
+      "ratio_measured_to_theoretical": 0.902
+    },
+    {
+      "emitter_width": 0.4,
+      "theoretical_penumbra_width": 0.2,
+      "measured_penumbra_width": 0.1805,
+      "ratio_measured_to_theoretical": 0.902
+    },
+    {
+      "emitter_width": 0.8,
+      "theoretical_penumbra_width": 0.4,
+      "measured_penumbra_width": 0.3609,
+      "ratio_measured_to_theoretical": 0.902
+    }
+  ]
+}

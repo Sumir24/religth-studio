@@ -73,3 +73,4 @@ All 6 canonical studio test cases evaluated at $384 \times 256$ in Production Fi
 ### 5. PARITY VERDICT
 
 With the camera basis correction and footprint dimension fixes deployed, the native Apple Metal GPU engine achieves **high-precision mathematical and visual parity** with the CPU reference renderer. The simple planar shadow targets ($\text{SDE} \le 3\,\text{px}$, $\text{IoU} \ge 0.90$) are **fully met and validated**.
+

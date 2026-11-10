@@ -96,3 +96,4 @@ Upon user authorization, the team should proceed immediately to:
 2. Port multi-light uniform packing to `metal2/`.
 3. Construct the cross-bilateral normal supervisor kernel.
 4. Execute validation benchmarks against multi-light commercial photographic plates.
+

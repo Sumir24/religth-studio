@@ -1,0 +1,50 @@
+{
+  "1024x576_preview": {
+    "width": 1024,
+    "height": 576,
+    "quality": "PREVIEW",
+    "gpu_p50_ms": 0.87,
+    "gpu_p95_ms": 1.02,
+    "gpu_p99_ms": 1.16,
+    "host_p50_ms": 7.71,
+    "host_p95_ms": 8.06,
+    "host_p99_ms": 8.88,
+    "passes_60fps_gate": true
+  },
+  "1024x576_final": {
+    "width": 1024,
+    "height": 576,
+    "quality": "FINAL",
+    "gpu_p50_ms": 1.33,
+    "gpu_p95_ms": 2.62,
+    "gpu_p99_ms": 2.76,
+    "host_p50_ms": 7.61,
+    "host_p95_ms": 8.77,
+    "host_p99_ms": 9.73,
+    "passes_60fps_gate": true
+  },
+  "1920x1080_preview": {
+    "width": 1920,
+    "height": 1080,
+    "quality": "PREVIEW",
+    "gpu_p50_ms": 3.0,
+    "gpu_p95_ms": 3.06,
+    "gpu_p99_ms": 3.08,
+    "host_p50_ms": 25.37,
+    "host_p95_ms": 29.05,
+    "host_p99_ms": 30.23,
+    "passes_60fps_gate": true
+  },
+  "1920x1080_final": {
+    "width": 1920,
+    "height": 1080,
+    "quality": "FINAL",
+    "gpu_p50_ms": 7.24,
+    "gpu_p95_ms": 13.08,
+    "gpu_p99_ms": 13.26,
+    "host_p50_ms": 32.14,
+    "host_p95_ms": 40.1,
+    "host_p99_ms": 41.49,
+    "passes_60fps_gate": true
+  }
+}

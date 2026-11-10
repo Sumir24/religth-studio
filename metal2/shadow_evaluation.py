@@ -187,3 +187,4 @@ def evaluate_comprehensive_shadow_fidelity(
         "penumbra": penumbra_dict,
         "contact": contact_dict
     }
+

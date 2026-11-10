@@ -135,16 +135,16 @@ class SuperquadricEllipsoid:
         self.bounding_radius = float(np.max(self.radii) * 1.5)
 
     def eval_inside_outside(self, p_local: np.ndarray) -> np.ndarray:
-        """Evaluates F(x, y, z) in canonical space. < 0 inside, > 0 outside."""
+        """Evaluates normalized radial distance metric G(p) = rho(p) - 1.0. < 0 inside, > 0 outside."""
         rx, ry, rz = self.radii[0], self.radii[1], self.radii[2]
-        nx = np.abs(p_local[..., 0]) / rx
-        ny = np.abs(p_local[..., 1]) / ry
-        nz = np.abs(p_local[..., 2]) / rz
+        nx = np.abs(p_local[..., 0]) / max(rx, 1e-4)
+        ny = np.abs(p_local[..., 1]) / max(ry, 1e-4)
+        nz = np.abs(p_local[..., 2]) / max(rz, 1e-4)
         
-        # Safe powers using logarithmic formulation to avoid overflow
         p_xy = nx**(2.0 / self.e2) + ny**(2.0 / self.e2)
-        f_val = p_xy**(self.e2 / self.e1) + nz**(2.0 / self.e1) - 1.0
-        return f_val
+        val = p_xy**(self.e2 / self.e1) + nz**(2.0 / self.e1)
+        rho = np.maximum(val, 1e-12)**(self.e1 / 2.0)
+        return rho - 1.0
 
     def eval_gradient(self, p_local: np.ndarray) -> np.ndarray:
         """Computes exact analytical gradient dF/dp in local space."""
@@ -168,7 +168,7 @@ class SuperquadricEllipsoid:
 
     def intersect_rays(self, ray_o: np.ndarray, ray_d: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Ray-Superquadric intersection via interval bracketing + secant refinement.
+        Ray-Superquadric intersection via normalized metric G(p), 32-step interval bracketing + 4-iteration bisection.
         """
         # Local transformation
         oc = ray_o - self.center
@@ -193,11 +193,11 @@ class SuperquadricEllipsoid:
         if not np.any(valid_range):
             return hit_out, t_out, norm_world
 
-        # For rays hitting the bounding volume, march 16 interval steps to bracket root
-        n_steps = 16
+        # March 32 intervals (33 sample points) matching Metal shader grid
+        n_steps = 33
         t_steps = np.linspace(0.0, 1.0, n_steps, dtype=np.float32)
         
-        # We perform vectorized search along rays
+        # Vectorized search along rays
         ro_v = ro_local[valid_range]
         rd_v = rd_local[valid_range]
         t0_v = t_enter[valid_range][:, None]
@@ -206,34 +206,35 @@ class SuperquadricEllipsoid:
         t_samples = t0_v + t_steps[None, :] * (t1_v - t0_v)  # (M, n_steps)
         p_samples = ro_v[:, None, :] + t_samples[..., None] * rd_v[:, None, :] # (M, n_steps, 3)
         
-        f_samples = self.eval_inside_outside(p_samples) # (M, n_steps)
+        g_samples = self.eval_inside_outside(p_samples) # (M, n_steps)
         
-        # Detect zero crossing (from positive to negative)
-        sign_change = (f_samples[:, :-1] > 0.0) & (f_samples[:, 1:] <= 0.0)
+        # Detect zero crossing (from outside positive to inside negative)
+        sign_change = (g_samples[:, :-1] > 0.0) & (g_samples[:, 1:] <= 0.0)
         has_hit = np.any(sign_change, axis=-1)
         
         # Index of first hit step
         first_step = np.argmax(sign_change, axis=-1)
         
-        # Secant refinement between step k and step k+1
+        # Bracket between step k and step k+1
         idx_m = np.arange(len(ro_v))
         ta = t_samples[idx_m, first_step]
         tb = t_samples[idx_m, first_step + 1]
-        fa = f_samples[idx_m, first_step]
-        fb = f_samples[idx_m, first_step + 1]
         
-        # 3 secant iterations
-        t_root = ta
-        for _ in range(3):
-            denom = np.where(np.abs(fb - fa) < 1e-6, 1e-6, fb - fa)
-            t_root = ta - fa * (tb - ta) / denom
-            p_mid = ro_v + t_root[:, None] * rd_v
-            f_mid = self.eval_inside_outside(p_mid)
-            cond = f_mid > 0.0
-            ta = np.where(cond, t_root, ta)
-            fa = np.where(cond, f_mid, fa)
-            tb = np.where(cond, tb, t_root)
-            fb = np.where(cond, fb, f_mid)
+        # 4 bisection steps for guaranteed interval reduction (factor of 16)
+        for _ in range(4):
+            t_mid = 0.5 * (ta + tb)
+            p_mid = ro_v + t_mid[:, None] * rd_v
+            g_mid = self.eval_inside_outside(p_mid)
+            cond = g_mid > 0.0
+            ta = np.where(cond, t_mid, ta)
+            tb = np.where(cond, tb, t_mid)
+            
+        # 1 safe secant refinement step on well-conditioned G
+        ga = self.eval_inside_outside(ro_v + ta[:, None] * rd_v)
+        gb = self.eval_inside_outside(ro_v + tb[:, None] * rd_v)
+        denom = np.where(np.abs(gb - ga) < 1e-6, 1e-6, gb - ga)
+        t_root = ta - ga * (tb - ta) / denom
+        t_root = np.clip(t_root, np.minimum(ta, tb), np.maximum(ta, tb))
             
         p_hit_local = ro_v + t_root[:, None] * rd_v
         grad_local = self.eval_gradient(p_hit_local)

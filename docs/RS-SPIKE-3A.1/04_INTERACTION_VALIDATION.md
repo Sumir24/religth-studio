@@ -131,3 +131,4 @@ Stage viewport rendering (`render_virtual_studio_viewport`) generates an isometr
 | **Undo/Redo State Response** | $\le 50.0\,\text{ms}$ | **13.67 ms** | **PASS** |
 | **Protected Mask Zero-Mutation** | Exact $0.0000000000$ | **$0.0000000000$** bitwise | **PASS** |
 | **State Synchrony Across Viewports** | $100\%$ consistent | Confirmed identical | **PASS** |
+

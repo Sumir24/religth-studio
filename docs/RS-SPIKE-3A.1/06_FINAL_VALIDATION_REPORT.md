@@ -105,3 +105,4 @@ The core tenet of Relight Studio is that photographic identity must never be deg
 Milestone **RS-SPIKE-3A.1** is declared **COMPLETE and PASSED**.
 
 The virtual 3D photography studio foundation is mathematically grounded, hardware-accelerated on Apple Silicon Metal, and fully responsive under interactive artist manipulation. The project is cleared to proceed to the next engineering milestone.
+

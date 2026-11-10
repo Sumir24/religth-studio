@@ -1,0 +1,47 @@
+[
+  {
+    "case_id": "P1_nike_sneaker",
+    "width": 576,
+    "height": 1024,
+    "max_protected_mutation": 0.0,
+    "gate_mutation": "PASS",
+    "dci_overall": 0.8941,
+    "dci_foreground": 0.8282,
+    "gate_dci": "PASS",
+    "out_of_gamut_pct": 0.0,
+    "gate_gamut": "PASS",
+    "contact_seam_vis_mean": 0.995972216129303,
+    "gpu_time_ms": 30.43,
+    "board_path": "docs/RS-SPIKE-3B/photographic_boards/P1_nike_sneaker_photographic_board.png"
+  },
+  {
+    "case_id": "P2_classical_statue",
+    "width": 576,
+    "height": 1024,
+    "max_protected_mutation": 0.0,
+    "gate_mutation": "PASS",
+    "dci_overall": 0.9971,
+    "dci_foreground": 0.9968,
+    "gate_dci": "PASS",
+    "out_of_gamut_pct": 0.0,
+    "gate_gamut": "PASS",
+    "contact_seam_vis_mean": 0.8278769850730896,
+    "gpu_time_ms": 6.86,
+    "board_path": "docs/RS-SPIKE-3B/photographic_boards/P2_classical_statue_photographic_board.png"
+  },
+  {
+    "case_id": "P3_architectural_relief",
+    "width": 768,
+    "height": 512,
+    "max_protected_mutation": 0.0,
+    "gate_mutation": "PASS",
+    "dci_overall": 0.9876,
+    "dci_foreground": 0.9963,
+    "gate_dci": "PASS",
+    "out_of_gamut_pct": 0.0,
+    "gate_gamut": "PASS",
+    "contact_seam_vis_mean": 0.6584672331809998,
+    "gpu_time_ms": 0.61,
+    "board_path": "docs/RS-SPIKE-3B/photographic_boards/P3_architectural_relief_photographic_board.png"
+  }
+]
