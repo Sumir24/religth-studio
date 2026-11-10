@@ -75,3 +75,44 @@ class UncertaintySupervisor:
             "sigma_mat": sigma_mat,
             "composite_confidence": composite_confidence
         }
+
+    @staticmethod
+    def evaluate_environment_uncertainty(env_data: Any) -> dict[str, Any]:
+        """
+        Assesses environment information status.
+        Distinguishes:
+          - KNOWN_HDR: User-provided calibrated HDR environment map
+          - ESTIMATED_SDR: SDR photograph approximate estimation
+          - SYNTHETIC_DEFAULT: Built-in synthetic studio environment
+          - DISABLED: Environment illumination disabled or missing
+        """
+        if env_data is None or not getattr(env_data, "enabled", False) or getattr(env_data, "intensity", 0.0) <= 1e-4:
+            return {
+                "status": "DISABLED",
+                "confidence": 0.0,
+                "is_physically_calibrated": False,
+                "description": "Environment lighting is disabled."
+            }
+        asset = getattr(env_data, "asset_path", None)
+        is_hdr = getattr(env_data, "is_hdr", True)
+        if asset:
+            if is_hdr:
+                return {
+                    "status": "KNOWN_HDR",
+                    "confidence": 0.95,
+                    "is_physically_calibrated": True,
+                    "description": "User-supplied HDR environment map."
+                }
+            else:
+                return {
+                    "status": "ESTIMATED_SDR",
+                    "confidence": 0.50,
+                    "is_physically_calibrated": False,
+                    "description": "SDR environment approximation (not calibrated radiance)."
+                }
+        return {
+            "status": "SYNTHETIC_DEFAULT",
+            "confidence": 0.80,
+            "is_physically_calibrated": True,
+            "description": "Deterministic synthetic HDR studio environment."
+        }

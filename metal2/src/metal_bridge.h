@@ -111,11 +111,34 @@ typedef struct {
 } CMaterialParams;
 
 typedef struct {
+    uint32_t enabled;
+    float intensity;
+    float rotation_rad;
+    float diffuse_weight;
+    float specular_weight;
+    float tint_rgb[3];
+    uint32_t has_env_map;
+    float _pad[7];
+} CEnvironmentParams;
+
+typedef struct {
     float v0[3];
     float v1[3];
     float v2[3];
     float normal[3];
 } CTriangleMesh;
+
+int metal2_set_environment_maps(
+    const float* irr_map,
+    uint32_t irr_w,
+    uint32_t irr_h,
+    const float* spec_04,
+    const float* spec_50,
+    uint32_t spec_w,
+    uint32_t spec_h,
+    const float* brdf_lut,
+    uint32_t lut_size
+);
 
 int metal2_render_frame(
     const CCameraParams* cam,
@@ -135,7 +158,8 @@ int metal2_render_frame(
     float* out_visibility,
     float* out_irradiance,
     float* out_specular,
-    float* out_gpu_time_ms
+    float* out_gpu_time_ms,
+    const CEnvironmentParams* env_params
 );
 
 // Buffer Pool Diagnostics

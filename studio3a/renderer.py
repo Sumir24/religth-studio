@@ -31,6 +31,57 @@ from studio3a.reconstruction import (
 )
 
 
+def _bilinear_sample_equirect(map_arr: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    H, W = map_arr.shape[:2]
+    px = u * float(W) - 0.5
+    py = v * float(H) - 0.5
+
+    x0 = np.floor(px).astype(np.int32)
+    y0 = np.floor(py).astype(np.int32)
+    x1 = x0 + 1
+    y1 = y0 + 1
+
+    fx = (px - x0)[..., None]
+    fy = (py - y0)[..., None]
+
+    x0_w = np.mod(x0, W)
+    x1_w = np.mod(x1, W)
+    y0_c = np.clip(y0, 0, H - 1)
+    y1_c = np.clip(y1, 0, H - 1)
+
+    c00 = map_arr[y0_c, x0_w]
+    c10 = map_arr[y0_c, x1_w]
+    c01 = map_arr[y1_c, x0_w]
+    c11 = map_arr[y1_c, x1_w]
+
+    c0 = (1.0 - fx) * c00 + fx * c10
+    c1 = (1.0 - fx) * c01 + fx * c11
+    return (1.0 - fy) * c0 + fy * c1
+
+
+def _bilinear_sample_lut(lut_arr: np.ndarray, nv: np.ndarray, r: np.ndarray) -> np.ndarray:
+    size = lut_arr.shape[0]
+    px = np.clip(nv, 0.0, 1.0) * float(size) - 0.5
+    py = np.clip(r, 0.0, 1.0) * float(size) - 0.5
+
+    x0 = np.clip(np.floor(px).astype(np.int32), 0, size - 1)
+    y0 = np.clip(np.floor(py).astype(np.int32), 0, size - 1)
+    x1 = np.clip(x0 + 1, 0, size - 1)
+    y1 = np.clip(y0 + 1, 0, size - 1)
+
+    fx = (px - np.floor(px))[..., None]
+    fy = (py - np.floor(py))[..., None]
+
+    c00 = lut_arr[y0, x0]
+    c10 = lut_arr[y0, x1]
+    c01 = lut_arr[y1, x0]
+    c11 = lut_arr[y1, x1]
+
+    c0 = (1.0 - fx) * c00 + fx * c10
+    c1 = (1.0 - fx) * c01 + fx * c11
+    return (1.0 - fy) * c0 + fy * c1
+
+
 class RenderBackend:
     """
     Authoritative Rendering Backend Contract.
@@ -297,6 +348,104 @@ class RenderBackend:
             total_illuminated_irradiance += irr_i * vis_i[..., None]
             if enable_spec:
                 total_specular_radiance += spec_i * vis_i[..., None]
+
+        # 5.1 Image-Based Lighting (IBL) Environment Transport
+        env_data = getattr(scene, "environment", None)
+        if env_data is not None and env_data.enabled and env_data.intensity > 1e-4:
+            from studio3a.environment import PreintegratedBRDFLUT, EnvironmentMapProcessor
+            from benchmarks.reference_ibl.synthetic_studio_env import SyntheticStudioEnvironment
+
+            env_key = f"{env_data.id}_{env_data.asset_path}"
+            if not hasattr(self, "_cached_env_key") or self._cached_env_key != env_key:
+                if env_data.asset_path and os.path.exists(env_data.asset_path):
+                    import cv2
+                    hdr_img = cv2.imread(env_data.asset_path, cv2.IMREAD_UNCHANGED)
+                    if hdr_img is not None:
+                        if hdr_img.dtype == np.uint8:
+                            env_map = (hdr_img.astype(np.float32) / 255.0) ** 2.2
+                        else:
+                            env_map = hdr_img.astype(np.float32)
+                        if len(env_map.shape) == 3 and env_map.shape[2] == 3:
+                            env_map = cv2.cvtColor(env_map, cv2.COLOR_BGR2RGB)
+                    else:
+                        env_map = SyntheticStudioEnvironment(width=512, height=256).data
+                else:
+                    env_map = SyntheticStudioEnvironment(width=512, height=256).data
+
+                self._cached_env_irr = EnvironmentMapProcessor.compute_diffuse_irradiance_map(
+                    env_map, out_width=128, out_height=64, n_samples=128
+                )
+                self._cached_env_spec_04 = EnvironmentMapProcessor.compute_specular_prefiltered_map(
+                    env_map, roughness=0.04, out_width=128, out_height=64, n_samples=128
+                )
+                self._cached_env_spec_50 = EnvironmentMapProcessor.compute_specular_prefiltered_map(
+                    env_map, roughness=0.50, out_width=128, out_height=64, n_samples=128
+                )
+                self._cached_lut = PreintegratedBRDFLUT.get_lut(size=256, n_samples=256)
+                self._cached_env_key = env_key
+
+            rot_rad = -math.radians(env_data.rotation_deg)
+            cos_rot, sin_rot = math.cos(rot_rad), math.sin(rot_rad)
+
+            # Normal rotated
+            n_rot = np.zeros_like(surface_norm)
+            n_rot[..., 0] = cos_rot * surface_norm[..., 0] - sin_rot * surface_norm[..., 2]
+            n_rot[..., 1] = surface_norm[..., 1]
+            n_rot[..., 2] = sin_rot * surface_norm[..., 0] + cos_rot * surface_norm[..., 2]
+
+            th_n = np.arccos(np.clip(n_rot[..., 1], -1.0, 1.0))
+            ph_n = np.arctan2(n_rot[..., 2], n_rot[..., 0])
+            u_n = (ph_n + math.pi) / (2.0 * math.pi)
+            v_n = th_n / math.pi
+
+            irr_env = _bilinear_sample_equirect(self._cached_env_irr, u_n, v_n)
+
+            tint = np.array(env_data.tint_rgb, dtype=np.float32)
+            env_diff_contrib = irr_env * (env_data.intensity * env_data.diffuse_weight) * tint * kd_map
+            env_diff_contrib[~active_surface_mask] = 0.0
+
+            total_unshadowed_irradiance += env_diff_contrib
+            total_illuminated_irradiance += env_diff_contrib
+
+            if enable_spec and env_data.specular_weight > 1e-4:
+                n_dot_v = np.clip(np.sum(surface_norm * view_dir_per_pixel, axis=-1, keepdims=True), 0.0, 1.0)
+                r_vec = 2.0 * n_dot_v * surface_norm - view_dir_per_pixel
+                r_norm = np.maximum(np.linalg.norm(r_vec, axis=-1, keepdims=True), 1e-7)
+                r_vec = r_vec / r_norm
+
+                r_rot = np.zeros_like(r_vec)
+                r_rot[..., 0] = cos_rot * r_vec[..., 0] - sin_rot * r_vec[..., 2]
+                r_rot[..., 1] = r_vec[..., 1]
+                r_rot[..., 2] = sin_rot * r_vec[..., 0] + cos_rot * r_vec[..., 2]
+
+                th_r = np.arccos(np.clip(r_rot[..., 1], -1.0, 1.0))
+                ph_r = np.arctan2(r_rot[..., 2], r_rot[..., 0])
+                u_r = (ph_r + math.pi) / (2.0 * math.pi)
+                v_r = th_r / math.pi
+
+                r_subj = mat_subj.roughness
+                r_rec = mat_rec.roughness
+                r_map = np.full((H, W), r_rec, dtype=np.float32)
+                r_map[fg_mask] = r_subj
+
+                t_rough = np.clip((r_map - 0.04) / (0.50 - 0.04), 0.0, 1.0)[..., None]
+                spec_env_04 = _bilinear_sample_equirect(self._cached_env_spec_04, u_r, v_r)
+                spec_env_50 = _bilinear_sample_equirect(self._cached_env_spec_50, u_r, v_r)
+                spec_env_prefiltered = (1.0 - t_rough) * spec_env_04 + t_rough * spec_env_50
+
+                brdf_scale_bias = _bilinear_sample_lut(self._cached_lut, n_dot_v[..., 0], r_map)
+
+                scale = brdf_scale_bias[..., 0:1]
+                bias = brdf_scale_bias[..., 1:2]
+
+                f0_map = np.full((H, W, 3), f0_rec, dtype=np.float32)
+                f0_map[fg_mask] = f0_subj
+
+                fresnel_split = f0_map * scale + bias
+                spec_env_contrib = fresnel_split * spec_env_prefiltered * (env_data.intensity * env_data.specular_weight) * tint
+                spec_env_contrib[~active_surface_mask] = 0.0
+
+                total_specular_radiance += spec_env_contrib
                 
         # 6. Contact Grounding Term
         if scene.render_settings.enable_contact_grounding:

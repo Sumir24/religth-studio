@@ -18,6 +18,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 
 from studio3a.material import MaterialData
+from studio3a.environment import EnvironmentData
 
 
 class ProxyType(str, Enum):
@@ -201,6 +202,7 @@ class StudioScene:
     active_light_id: Optional[str] = None
     materials: List[MaterialData] = field(default_factory=lambda: [MaterialData()])
     active_material_id: Optional[str] = None
+    environment: EnvironmentData = field(default_factory=EnvironmentData)
 
     def __post_init__(self) -> None:
         if self.active_light_id is None and self.lights:
@@ -213,8 +215,8 @@ class StudioScene:
         self.camera.validate()
         self.subject.validate()
         self.receiver.validate()
-        if not self.lights:
-            raise ValueError("StudioScene must contain at least one light.")
+        if not self.lights and (self.environment is None or not self.environment.enabled):
+            raise ValueError("StudioScene must contain at least one light or an active environment.")
         if len(self.lights) > 8:
             raise ValueError(f"StudioScene supports at most 8 lights on GPU pipeline (found {len(self.lights)}).")
         
@@ -227,8 +229,11 @@ class StudioScene:
             light_ids.add(light.id)
 
         # Validate active light selection
-        if self.active_light_id is None or self.active_light_id not in light_ids:
-            self.active_light_id = self.lights[0].id
+        if self.lights:
+            if self.active_light_id is None or self.active_light_id not in light_ids:
+                self.active_light_id = self.lights[0].id
+        else:
+            self.active_light_id = None
 
         # Validate materials
         if not self.materials:
@@ -242,6 +247,7 @@ class StudioScene:
         if self.active_material_id is None or self.active_material_id not in mat_ids:
             self.active_material_id = self.materials[0].id
 
+        self.environment.validate()
         self.render_settings.validate()
         validate_finite_floats(asdict(self))
 
@@ -461,6 +467,9 @@ class StudioScene:
         active_mid = d.get("active_material_id")
         if not active_mid and materials:
             active_mid = materials[0].id
+
+        env_raw = d.get("environment", {})
+        env = EnvironmentData.from_dict(env_raw) if env_raw else EnvironmentData()
         
         scene = cls(
             metadata=meta,
@@ -471,7 +480,8 @@ class StudioScene:
             render_settings=rnd,
             active_light_id=active_lid,
             materials=materials,
-            active_material_id=active_mid
+            active_material_id=active_mid,
+            environment=env
         )
         scene.validate()
         return scene

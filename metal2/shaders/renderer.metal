@@ -66,6 +66,90 @@ struct MaterialParams {
     float _pad[7];
 };
 
+struct EnvironmentParams {
+    uint enabled;
+    float intensity;
+    float rotation_rad;
+    float diffuse_weight;
+    float specular_weight;
+    packed_float3 tint_rgb;
+    uint has_env_map;
+    float _pad[7];
+};
+
+// -----------------------------------------------------------------------------
+// 1.05 ENVIRONMENT LOOKUP HELPERS
+// -----------------------------------------------------------------------------
+
+inline float3 sample_equirectangular_buffer(
+    device const packed_float3* map,
+    uint width,
+    uint height,
+    float3 dir
+) {
+    if (!map) return float3(0.0f);
+    float x = dir.x;
+    float y = dir.y;
+    float z = dir.z;
+    float theta = acos(clamp(y, -1.0f, 1.0f));
+    float phi = (fabs(x) < 1e-6f && fabs(z) < 1e-6f) ? 0.0f : atan2(z, x);
+    float u = (phi + 3.141592653589793f) / (2.0f * 3.141592653589793f);
+    float v = theta / 3.141592653589793f;
+
+    float px = u * float(width) - 0.5f;
+    float py = v * float(height) - 0.5f;
+
+    int x0 = int(floor(px));
+    int y0 = int(floor(py));
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+
+    float fx = px - float(x0);
+    float fy = py - float(y0);
+
+    int x0_w = (x0 % int(width) + int(width)) % int(width);
+    int x1_w = (x1 % int(width) + int(width)) % int(width);
+    int y0_c = clamp(y0, 0, int(height) - 1);
+    int y1_c = clamp(y1, 0, int(height) - 1);
+
+    float3 c00 = float3(map[y0_c * width + x0_w]);
+    float3 c10 = float3(map[y0_c * width + x1_w]);
+    float3 c01 = float3(map[y1_c * width + x0_w]);
+    float3 c11 = float3(map[y1_c * width + x1_w]);
+
+    float3 c0 = mix(c00, c10, fx);
+    float3 c1 = mix(c01, c11, fx);
+    return mix(c0, c1, fy);
+}
+
+inline float2 sample_brdf_lut_buffer(
+    device const packed_float2* lut,
+    uint size,
+    float n_dot_v,
+    float roughness
+) {
+    if (!lut) return float2(1.0f, 0.0f);
+    float px = clamp(n_dot_v, 0.0f, 1.0f) * float(size) - 0.5f;
+    float py = clamp(roughness, 0.0f, 1.0f) * float(size) - 0.5f;
+
+    int x0 = clamp(int(floor(px)), 0, int(size) - 1);
+    int y0 = clamp(int(floor(py)), 0, int(size) - 1);
+    int x1 = clamp(x0 + 1, 0, int(size) - 1);
+    int y1 = clamp(y0 + 1, 0, int(size) - 1);
+
+    float fx = px - float(x0);
+    float fy = py - float(y0);
+
+    float2 c00 = float2(lut[y0 * size + x0]);
+    float2 c10 = float2(lut[y0 * size + x1]);
+    float2 c01 = float2(lut[y1 * size + x0]);
+    float2 c11 = float2(lut[y1 * size + x1]);
+
+    float2 c0 = mix(c00, c10, fx);
+    float2 c1 = mix(c01, c11, fx);
+    return mix(c0, c1, fy);
+}
+
 // -----------------------------------------------------------------------------
 // 1.1 COOK-TORRANCE MICROFACET BRDF FUNCTIONS
 // -----------------------------------------------------------------------------
@@ -497,6 +581,11 @@ kernel void render_hybrid_studio_kernel(
     constant uint& num_lights                 [[buffer(14)]],
     constant MaterialParams& material         [[buffer(15)]],
     device packed_float3* out_specular        [[buffer(16)]],
+    constant EnvironmentParams& env_params    [[buffer(17)]],
+    device const packed_float3* env_irr       [[buffer(18)]],
+    device const packed_float3* env_spec_04   [[buffer(19)]],
+    device const packed_float3* env_spec_50   [[buffer(20)]],
+    device const packed_float2* brdf_lut      [[buffer(21)]],
     uint2 pixel_coord                         [[thread_position_in_grid]]
 ) {
     if (pixel_coord.x >= cam.width || pixel_coord.y >= cam.height) return;
@@ -665,6 +754,49 @@ kernel void render_hybrid_studio_kernel(
         total_illuminated_irr += irr_acc_li * vis_li;
         if (material.enable_specular != 0) {
             total_illuminated_spec += spec_acc_li * vis_li;
+        }
+    }
+
+    // 3.1 Image-Based Lighting (IBL) Environment Transport
+    if (env_params.enabled != 0 && env_params.has_env_map != 0 && env_params.intensity > 1e-4f) {
+        float rot = -env_params.rotation_rad;
+        float cos_r = cos(rot);
+        float sin_r = sin(rot);
+
+        // Rotated surface normal
+        float3 n_rot = float3(
+            cos_r * surface_norm.x - sin_r * surface_norm.z,
+            surface_norm.y,
+            sin_r * surface_norm.x + cos_r * surface_norm.z
+        );
+
+        // Diffuse IBL
+        float3 irr_env = sample_equirectangular_buffer(env_irr, 128, 64, n_rot);
+        float3 env_diff = irr_env * (env_params.intensity * env_params.diffuse_weight) * float3(env_params.tint_rgb) * kd_val;
+        total_unshadowed_irr += env_diff;
+        total_illuminated_irr += env_diff;
+
+        // Specular IBL
+        if (material.enable_specular != 0 && env_params.specular_weight > 1e-4f) {
+            float n_dot_v = clamp(dot(surface_norm, v_dir), 0.0f, 1.0f);
+            float3 r_vec = normalize(2.0f * n_dot_v * surface_norm - v_dir);
+
+            float3 r_rot = float3(
+                cos_r * r_vec.x - sin_r * r_vec.z,
+                r_vec.y,
+                sin_r * r_vec.x + cos_r * r_vec.z
+            );
+
+            float3 spec_04 = sample_equirectangular_buffer(env_spec_04, 128, 64, r_rot);
+            float3 spec_50 = sample_equirectangular_buffer(env_spec_50, 128, 64, r_rot);
+
+            float t_rough = clamp((cur_roughness - 0.04f) / (0.50f - 0.04f), 0.0f, 1.0f);
+            float3 spec_env = mix(spec_04, spec_50, t_rough);
+
+            float2 brdf_sb = sample_brdf_lut_buffer(brdf_lut, 256, n_dot_v, cur_roughness);
+            float3 f_split = f0_val * brdf_sb.x + brdf_sb.y;
+            float3 env_spec = f_split * spec_env * (env_params.intensity * env_params.specular_weight) * float3(env_params.tint_rgb);
+            total_illuminated_spec += env_spec;
         }
     }
 

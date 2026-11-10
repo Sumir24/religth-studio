@@ -102,6 +102,19 @@ class CMaterialParams(Structure):
     ]
 
 
+class CEnvironmentParams(Structure):
+    _fields_ = [
+        ("enabled", c_uint32),
+        ("intensity", c_float),
+        ("rotation_rad", c_float),
+        ("diffuse_weight", c_float),
+        ("specular_weight", c_float),
+        ("tint_rgb", c_float * 3),
+        ("has_env_map", c_uint32),
+        ("_pad", c_float * 7),
+    ]
+
+
 class Metal2Bridge:
     _instance: Optional[Metal2Bridge] = None
 
@@ -135,6 +148,19 @@ class Metal2Bridge:
         ]
         self.lib.metal2_dispatch_oklab_gamut_map.restype = c_int
 
+        self.lib.metal2_set_environment_maps.argtypes = [
+            POINTER(c_float),
+            c_uint32,
+            c_uint32,
+            POINTER(c_float),
+            POINTER(c_float),
+            c_uint32,
+            c_uint32,
+            POINTER(c_float),
+            c_uint32,
+        ]
+        self.lib.metal2_set_environment_maps.restype = c_int
+
         self.lib.metal2_render_frame.argtypes = [
             POINTER(CCameraParams),
             POINTER(CProxyParams),
@@ -153,7 +179,8 @@ class Metal2Bridge:
             POINTER(c_float),
             POINTER(c_float),
             POINTER(c_float),
-            POINTER(c_float)
+            POINTER(c_float),
+            POINTER(CEnvironmentParams),
         ]
         self.lib.metal2_render_frame.restype = c_int
 
@@ -251,6 +278,47 @@ class Metal2Bridge:
 
         return out_flat.reshape(orig_shape), float(gpu_time.value)
 
+    def set_environment_maps(
+        self,
+        diffuse_irr_map: Optional[np.ndarray],
+        specular_pref_04: Optional[np.ndarray],
+        specular_pref_50: Optional[np.ndarray],
+        brdf_lut: Optional[np.ndarray]
+    ) -> None:
+        """
+        Uploads diffuse irradiance, specular prefiltered maps, and 2D BRDF LUT to persistent GPU memory.
+        """
+        if (diffuse_irr_map is None or specular_pref_04 is None or
+            specular_pref_50 is None or brdf_lut is None):
+            status = self.lib.metal2_set_environment_maps(
+                None, 0, 0, None, None, 0, 0, None, 0
+            )
+            if status != 0:
+                raise RuntimeError(f"metal2_set_environment_maps clear failed (code: {status})")
+            return
+
+        irr_h, irr_w = diffuse_irr_map.shape[:2]
+        spec_h, spec_w = specular_pref_04.shape[:2]
+        lut_size = brdf_lut.shape[0]
+
+        irr_c = np.ascontiguousarray(diffuse_irr_map, dtype=np.float32)
+        spec_04_c = np.ascontiguousarray(specular_pref_04, dtype=np.float32)
+        spec_50_c = np.ascontiguousarray(specular_pref_50, dtype=np.float32)
+        lut_c = np.ascontiguousarray(brdf_lut, dtype=np.float32)
+
+        irr_ptr = irr_c.ctypes.data_as(POINTER(c_float))
+        spec_04_ptr = spec_04_c.ctypes.data_as(POINTER(c_float))
+        spec_50_ptr = spec_50_c.ctypes.data_as(POINTER(c_float))
+        lut_ptr = lut_c.ctypes.data_as(POINTER(c_float))
+
+        status = self.lib.metal2_set_environment_maps(
+            irr_ptr, c_uint32(irr_w), c_uint32(irr_h),
+            spec_04_ptr, spec_50_ptr, c_uint32(spec_w), c_uint32(spec_h),
+            lut_ptr, c_uint32(lut_size)
+        )
+        if status != 0:
+            raise RuntimeError(f"metal2_set_environment_maps failed (code: {status})")
+
     def render_frame(
         self,
         cam_params: CCameraParams,
@@ -263,7 +331,8 @@ class Metal2Bridge:
         fg_mask: Optional[np.ndarray],
         protected_mask: Optional[np.ndarray],
         image_orig_srgb: np.ndarray,
-        material_params: Optional[CMaterialParams] = None
+        material_params: Optional[CMaterialParams] = None,
+        env_params: Optional[CEnvironmentParams] = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
         """
         Executes full 3D rendering pass on Metal GPU.
@@ -278,9 +347,12 @@ class Metal2Bridge:
         if isinstance(light_params, (list, tuple)):
             lights_list = list(light_params)
         else:
-            lights_list = [light_params]
+            lights_list = [light_params] if light_params is not None else []
         num_lights = len(lights_list)
-        lights_arr = (CLightParams * num_lights)(*lights_list)
+        if num_lights > 0:
+            lights_arr = (CLightParams * num_lights)(*lights_list)
+        else:
+            lights_arr = None
 
         # Prepare outputs
         out_relit = np.empty((H, W, 3), dtype=np.float32)
@@ -323,6 +395,7 @@ class Metal2Bridge:
         out_spec_ptr = out_spec.ctypes.data_as(POINTER(c_float))
 
         mat_ptr = ctypes.byref(material_params) if material_params is not None else None
+        env_ptr = ctypes.byref(env_params) if env_params is not None else None
 
         status = self.lib.metal2_render_frame(
             ctypes.byref(cam_params),
@@ -342,7 +415,8 @@ class Metal2Bridge:
             out_vis_ptr,
             out_irr_ptr,
             out_spec_ptr,
-            ctypes.byref(gpu_time)
+            ctypes.byref(gpu_time),
+            env_ptr
         )
 
         if status != 0:

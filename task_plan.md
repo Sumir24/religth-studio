@@ -1,115 +1,126 @@
-# RS-SPIKE-3C.2.1 Task Plan: Independent BRDF, Material Transport & Photographic Fidelity Audit
+# RS-SPIKE-3C.3 Task Plan: Image-Based Lighting & Studio Reflection Probes
 
-**Role:** Independent Principal Rendering Engineer, Physically Based Rendering Researcher, Metal GPU Performance Engineer, and Adversarial Verification Lead.  
-**Baseline Checkpoint:** `9f9bb12` (RS-SPIKE-3C.2)  
-**Audit Branch:** `audit/RS-SPIKE-3C.2.1-independent-verification`  
-**Execution Standard:** Evidence-first adversarial audit. Zero modifications to production renderer. Standalone mathematical references, reproducible experiments, and forensic cross-checking.
+**Role:** Principal Rendering Engineer, Physically Based Rendering Researcher, Metal GPU Engineer, Computational Photography Architect, and Independent Validation Lead.  
+**Starting Checkpoint:** `3d6cee7` (Phase 0 Remediation Complete)  
+**Branch:** `feature/RS-SPIKE-3C.3-ibl-reflection-probes`  
+**Platform:** macOS / Apple Silicon / Metal 3  
+**Execution Standard:** Evidence-first engineering. Ground-truth physical verification before implementation. Preservation of original photograph integrity and non-destructive Two-Scale reconstruction.
 
 ---
 
-## Phase 0: Repository Forensics & Baseline Reproduction
-- [x] 0.1 Verify checkpoint `9f9bb12`, git log, commit metadata, and clean working tree.
-- [x] 0.2 Read and audit all 13 RS-SPIKE-3C.2 reports against active code.
-- [x] 0.3 Inspect core implementations:
-  - `studio3a/brdf.py`
-  - `studio3a/material.py`
-  - `studio3a/lighting.py`
-  - `studio3a/reconstruction.py`
-  - `metal2/shaders/renderer.metal`
-  - `metal2/src/metal_bridge.h` & `metal2/src/metal_bridge.mm`
-  - `metal2/bridge.py` & `metal2/renderer.py`
-  - `studio3a/renderer.py`
-- [x] 0.4 Reproduce full 87-test repository regression suite (`pytest tests/ -v`).
-- [x] 0.5 Reproduce material benchmarks and report any discrepancies.
-- [x] 0.6 Deliverable: Author `docs/RS-SPIKE-3C.2.1/00_REPOSITORY_FORENSIC_AUDIT.md`.
+## Phase 0: Baseline & Repository Verification
+- [x] 0.1 Inspect complete repository, Git state, and active branch (`feature/RS-SPIKE-3C.3-ibl-reflection-probes` at `3d6cee7`).
+- [x] 0.2 Inspect the GGX denominator fix in `studio3a/brdf.py` and `metal2/shaders/renderer.metal`.
+- [x] 0.3 Trace production rendering path from `StudioScene` through `RenderBackend` / `MetalRenderBackend` to final reconstructed image.
+- [x] 0.4 Audit existing material (`MaterialData`), light (`AreaLightData`), camera, geometry, and reconstruction structures.
+- [x] 0.5 Check for existing environment abstractions or prior IBL attempts.
+- [x] 0.6 Reproduce baseline measurements (test suite, benchmarks, performance).
+- [x] 0.7 Deliverable: Author `RS_SPIKE_3C_3_BASELINE_AUDIT.md`.
 
-## Phase 1: Independent BRDF Mathematical Audit
-- [x] 1.1 Formulate an independent, standalone mathematical reference for Cook-Torrance BRDF:
-  - Trowbridge-Reitz GGX NDF ($D$).
-  - Heitz height-correlated Smith masking-shadowing ($G_2$ / $Vis$).
-  - Schlick Fresnel ($F$).
-  - Half-vector construction and dot product clamping.
-- [x] 1.2 Inspect and challenge production numerical safeguards:
-  - $\text{MIN\_ROUGHNESS} = 0.04$, $\alpha_{\text{min}} = 0.0016$.
-  - $\epsilon_{\text{dot}} = 10^{-5}$, $\epsilon_{\text{len}} = 10^{-7}$.
-  - Identified critical non-monotonic inversion below $r = 0.0562$.
-- [x] 1.3 Verify roughness convention consistency across Python, MSL, scene serialization, and UI.
-- [x] 1.4 Stress-test edge cases with independent test suite:
-  - Normal incidence ($V = L = N$).
-  - Grazing incidence ($\theta \to 90^\circ$).
-  - Roughness extremes ($\alpha \to 0$, $\alpha = 1$).
-  - Reflection below geometric horizon ($N \cdot L \le 0$, $N \cdot V \le 0$).
-  - Degenerate half-vectors ($V = -L$).
-  - Extreme $F_0$ values.
-- [x] 1.5 Deliverable: Author `docs/RS-SPIKE-3C.2.1/01_BRDF_MATHEMATICAL_VERIFICATION.md`.
+## Phase A: Controlled IBL Reference Experiment
+- [x] A.1 Create a controlled synthetic environment map with distinct features:
+  - High-intensity bright region (studio softbox / key light).
+  - Low-intensity dark region.
+  - Neutral / midtone studio bounce.
+  - Tinted / colored accent feature.
+  - High-contrast edge boundary.
+- [x] A.2 Establish controlled reference scene:
+  - 1 metallic sphere ($m=1.0, F_0=1.0$).
+  - 1 dielectric sphere ($m=0.0, F_0=0.04$).
+  - Fixed camera, fixed exposure, no direct lights.
+- [x] A.3 Material test matrix: roughness $r \in [0.04, 0.10, 0.25, 0.50, 1.00]$ for both metallic and dielectric.
+- [x] A.4 Construct independent, high-sample Monte Carlo reference implementation:
+  - Cosine-weighted hemisphere integration for diffuse irradiance.
+  - GGX importance sampling over hemisphere for specular reflection.
+  - Demonstrate numerical convergence across sample counts ($N = 64, 256, 1024, 4096, 16384$).
+- [x] A.5 Validate acceptance criteria:
+  - Sharpness decreases monotonically with increasing roughness.
+  - No energy amplification ($R(V) \le 1.0$).
+  - No black pixels / coordinate lookup singularities.
+  - No seam discontinuities at $\phi = 0/2\pi$ or poles $\theta = 0/\pi$.
+  - Stability at $r = 0.04$.
+- [x] A.6 Deliverable: Author `RS_SPIKE_3C_3_PHASE_A_REFERENCE.md` with rendered images, convergence graphs, and error metrics.
 
-## Phase 2: Energy Conservation & White Furnace Audit
-- [x] 2.1 Audit reported hemispherical reflectance ($\le 1.0$) and white furnace responses ($L_{\text{diff}} = 1.000$, $L_{\text{spec}} = 0.994$).
-- [x] 2.2 Increase numerical integration grid resolution ($180 \times 360$, $360 \times 720$, $720 \times 1440$) and assess convergence.
-- [x] 2.3 Test multiple angular sampling strategies (uniform $(\theta, \phi)$ vs cosine-weighted hemisphere vs Fibonacci hemisphere).
-- [x] 2.4 Audit full parameter space:
-  - Dielectric sweep ($F_0 \in [0.01, 0.08]$).
-  - Metallic sweep ($m \in [0.0, 1.0]$).
-  - Roughness extremes ($\alpha \in [0.04, 1.0]$).
-  - Grazing view angles ($\theta_V \in [0^\circ, 89^\circ]$).
-- [x] 2.5 Report worst-case energy violations, integration uncertainty, and convergence curves (proven to be regular grid discretization artifact; strictly converges to $0.9967 \le 1.0$ under Spherical Fibonacci quadrature).
-- [x] 2.6 Deliverable: Author `docs/RS-SPIKE-3C.2.1/02_ENERGY_CONSERVATION_AUDIT.md`.
+## Phase B: Environment Representation & Precomputation Architecture
+- [x] B.1 Select and justify environment representation:
+  - Equirectangular format (2:1 aspect ratio, linear float32 HDR).
+  - Radiance environment map representation.
+  - Diffuse irradiance map representation (precomputed / numerical).
+  - Specular prefiltered reflection map (Karis / Epic Games split-sum approximation with GGX roughness mips).
+  - Preintegrated BRDF LUT ($256 \times 256$ float32 texture for $N \cdot V$ vs Roughness).
+- [x] B.2 Define linear color space, HDR radiometric units, and exposure conventions.
+- [x] B.3 Implement environment map loading, validation, and prefiltering generator in Python.
+- [x] B.4 Add unit tests for environment map coordinates, sampling, and prefiltering.
 
-## Phase 3: Area-Light Integration Audit
-- [x] 3.1 Independently audit Stochastic Stratified Area Integration vs 1024-spp ground truth vs Karis MRP.
-- [x] 3.2 Implement high-sample reference ($4096\,\text{spp}$) and verify convergence of the 1024-spp baseline ($\max \Delta = 5.33 \times 10^{-9}$).
-- [x] 3.3 Test varying emitter configurations:
-  - Aspect ratios ($1:1, 4:1, 1:4$) and sizes ($0.1\,\text{m}$ to $2.0\,\text{m}$).
-  - Distances ($0.5\,\text{m}$ to $5.0\,\text{m}$) and steep grazing angles.
-  - Penumbra clipping and partial occlusion.
-  - Multiple overlapping area lights.
-- [x] 3.4 Measure sample count variance, bias, and worst-case error.
-- [x] 3.5 Deliverable: Author `docs/RS-SPIKE-3C.2.1/03_AREA_LIGHT_INTEGRATION_AUDIT.md`.
+## Phase C: Metal GPU Implementation
+- [x] C.1 Extend `metal2/shaders/renderer.metal`:
+  - Add prefiltered specular environment sampling with GGX mip selection.
+  - Add 2D BRDF LUT sampling (`brdf_lut`).
+  - Add diffuse irradiance environment sampling.
+  - Combine environment diffuse: $k_d \cdot c_{\text{diff}} \cdot E_{\text{diffuse}}$.
+  - Combine environment specular: $(F_0 \cdot \text{scale} + \text{bias}) \cdot L_{\text{prefiltered}}$.
+- [x] C.2 Extend `metal2/src/metal_bridge.mm` and `metal2/src/metal_bridge.h`:
+  - Texture/buffer bindings for environment irradiance map, prefiltered maps, and BRDF LUT.
+  - Persistent Metal buffer allocations in steady state.
+  - Extend uniform buffer for environment parameters (`CEnvironmentParams`).
+- [x] C.3 Extend Python bridge `metal2/bridge.py` and `metal2/renderer.py` to support environment data.
+- [x] C.4 Extend CPU reference renderer in `studio3a/renderer.py` for exact mathematical parity.
+- [x] C.5 Verify CPU–Metal parity for environment illumination ($\text{MAE} < 0.005$).
 
-## Phase 4: Two-Scale Photographic Reconstruction Audit
-- [x] 4.1 Audit mathematical formulation: $\mathbf{L}_{\text{relit}} = I_{\text{orig}} \cdot \exp(\hat{\rho}_{\text{diffuse}}) + \Delta \mathbf{L}_{\text{specular}}$.
-- [x] 4.2 Audit radiometric units, color spaces, and linear-light conversion.
-- [x] 4.3 Evaluate highlight preservation vs double-counting risks on existing photographic specularities.
-- [x] 4.4 Inspect Guided Filter edge behavior, halo suppression, and C3 Oklab gamut mapping under extreme exposure.
-- [x] 4.5 Test synthetic controlled fixtures with known separated ground-truth diffuse/specular signals.
-- [x] 4.6 Deliverable: Author `docs/RS-SPIKE-3C.2.1/04_TWO_SCALE_RECONSTRUCTION_AUDIT.md`.
+## Phase D: Direct Light + IBL Energy Accounting
+- [x] D.1 Formulate rigorous radiometric balance:
+  - Direct Diffuse + Direct Specular + Environment Diffuse + Environment Specular.
+  - Single-scattering energy conservation: $k_d = (1 - F) \cdot (1 - \text{metallic})$.
+- [x] D.2 Test configurations:
+  - Environment only.
+  - 1 direct light only.
+  - Environment + 1 direct light.
+  - Environment + 4 direct lights.
+  - Environment + 8 direct lights.
+- [x] D.3 Verify energy bounds under multi-light + IBL illumination (no unintended doubling).
 
-## Phase 5: Photographic Material Audit & DCI Investigation
-- [x] 5.1 Inspect all 15 photographic evaluation results and 100% scale diagnostic boards across Plates P1, P2, P3.
-- [x] 5.2 Deep-dive into Plate P1 (Nike sneaker) Rough Metal DCI drop ($0.7899$):
-  - Is it physically justified conductor electron absorption ($k_d \to 0$)?
-  - Is it an inappropriate material assignment to an organic/cloth plate?
-  - Does the Two-Scale model over-attenuate base texture when $k_d = 0$?
-  - Proven: interaction of conductor diffuse extinction ($k_d = 0$) on low base luminance sneaker ($\mu_Y = 0.13$) with broad additive specular sheen. Polished Metal scored 0.9894 due to off-axis specular silence resulting in pure ambient scalar dimming.
-- [x] 5.3 Inspect texture crops for artificial plastic sheen, highlight blowout, or texture crunch.
-- [x] 5.4 Deliverable: Author `docs/RS-SPIKE-3C.2.1/05_PHOTOGRAPHIC_MATERIAL_AUDIT.md`.
+## Phase E: Relight Studio Photographic Integration
+- [x] E.1 Integrate IBL into Two-Scale Photographic Reconstruction:
+  - Diffuse transport: $\mathbf{L}_{\text{diffuse, total}} = \mathbf{L}_{\text{direct, diff}} + \mathbf{L}_{\text{env, diff}}$.
+  - Guided filter applies to combined diffuse ratio.
+  - Specular transport: $\mathbf{L}_{\text{specular, total}} = \mathbf{L}_{\text{direct, spec}} + \mathbf{L}_{\text{env, spec}}$.
+  - Additive specular highlight overlay with C3 Oklab gamut compression.
+- [x] E.2 Evaluate on photographic test plates:
+  - Plate P1: Nike sneaker.
+  - Plate P2: Classical statue.
+  - Plate P3: Architectural relief.
+- [x] E.3 Measure foreground DCI, background DCI, whole-image DCI, and protected-region zero-mutation.
+- [x] E.4 Verify zero modification to unmasked background and strict identity preservation.
 
-## Phase 6: Performance Reconciliation & GPU Architecture Audit
-- [x] 6.1 Reproduce reported hardware benchmarks on Apple Silicon M5 across 60 configurations.
-- [x] 6.2 Analyze discrepancy between 576p diffuse baseline ($4.25\,\text{ms}$) and diffuse+specular ($4.15\,\text{ms}$) (proven to be host thread scheduling and DVFS power-state ramping; true GPU hardware execution is monotonic: $1.72\,\text{ms}$ vs $1.78\,\text{ms}$).
-- [x] 6.3 Reconcile Full HD throughput ($80.6\,\text{FPS}$ diffuse, $78.9\,\text{FPS}$ specular) meeting the interactive 80 FPS target.
-- [x] 6.4 Audit memory bandwidth, UMA allocations, synchronization points, and command encoder overhead (verified zero allocations over 158 steady frames).
-- [x] 6.5 Deliverable: Author `docs/RS-SPIKE-3C.2.1/06_PERFORMANCE_RECONCILIATION.md`.
+## Phase F: Uncertainty Supervisor & Artist Controls
+- [x] F.1 Integrate environment parameters into `StudioScene`:
+  - `EnvironmentData`: `enabled`, `asset_id`, `intensity`, `rotation_deg`, `diffuse_weight`, `specular_weight`.
+  - Schema migration and JSON serialization round-trip.
+  - Undo/redo stack preservation.
+- [x] F.2 Integrate with Uncertainty Supervisor:
+  - Distinguish known HDR, user-provided, estimated SDR, and missing environment info.
+  - Prevent fabrication of missing environment data as ground truth.
+- [x] F.3 Author comprehensive test suite in `tests/RS-SPIKE-3C.3/`.
 
-## Phase 7: Material Model & Serialization Audit
-- [x] 7.1 Audit `MaterialData` dataclass invariants, bounds, and factory profiles.
-- [x] 7.2 Audit v3.2.0 scene schema migration from v3.0.0 and v3.1.0 legacy JSONs.
-- [x] 7.3 Audit undo/redo history preservation, state immutability, and missing material defaults.
-- [x] 7.4 Deliverable: Author `docs/RS-SPIKE-3C.2.1/07_MATERIAL_MODEL_AND_SERIALIZATION_AUDIT.md`.
+## Phase G: Validation, Performance & Reporting
+- [x] G.1 Execute full regression suite (historical + new spike): 118/118 passing.
+- [x] G.2 Benchmark 1024x576 and 1920x1080 across 5 configurations.
+- [x] G.3 Produce all 5 authoritative milestone markdown deliverables.
+- [x] G.4 Produce high-resolution diagnostic visual comparison boards.
+  - Flag environment reflection reliability based on surface normal visibility and proxy distance.
+  - Prevent deceptive "ground truth" claims for unmeasured environment detail.
 
-## Phase 8: Test & Regression Audit
-- [x] 8.1 Audit all 87 tests for circularity, shared algorithmic implementations, or weak assertion tolerances (identified roughness sweep boundary avoidance).
-- [x] 8.2 Construct independent adversarial test suite in `tests/audit_3c21/test_adversarial_brdf.py`.
-- [x] 8.3 Verify 0 regressions on production codebase without modifying production files: **92 / 92 passed (100.0%)** in $29.37\,\text{s}$.
-- [x] 8.4 Deliverable: Author `docs/RS-SPIKE-3C.2.1/08_REGRESSION_TEST_AUDIT.md`.
-
-## Phase 9: RS-SPIKE-3C.3 Readiness Evaluation
-- [x] 9.1 Evaluate system readiness for Image-Based Lighting (IBL) and Studio Reflection Probes.
-- [x] 9.2 Address 8 architectural IBL questions formulated in directive.
-- [x] 9.3 Define prerequisites and architectural roadmap for RS-SPIKE-3C.3.
-- [x] 9.4 Deliverable: Author `docs/RS-SPIKE-3C.2.1/09_RS-SPIKE-3C.3_READINESS.md`.
-
-## Phase 10: Final Independent Audit & Verdict
-- [x] 10.1 Synthesize findings across all 9 audit phases.
-- [x] 10.2 Issue authoritative final verdict: **CONDITIONAL PASS (14/15 Acceptance Gates Satisfied Unconditionally, 1 Conditional)**.
-- [x] 10.3 Deliverable: Author `docs/RS-SPIKE-3C.2.1/10_FINAL_INDEPENDENT_AUDIT.md`.
+## Phase G: Validation, Performance & Deliverables
+- [ ] G.1 Run full regression suite across repository (all existing + new tests).
+- [ ] G.2 Perform comprehensive hardware performance benchmarks on Apple Silicon M5 GPU:
+  - 576p and 1080p preview & final quality.
+  - Zero heap allocation verification across steady frames.
+  - Accurate latency, FPS, and bottleneck analysis.
+- [ ] G.3 Author all required deliverables:
+  - `RS_SPIKE_3C_3_BASELINE_AUDIT.md`
+  - `RS_SPIKE_3C_3_PHASE_A_REFERENCE.md`
+  - `RS_SPIKE_3C_3_IMPLEMENTATION_REPORT.md`
+  - `RS_SPIKE_3C_3_VALIDATION_REPORT.md`
+  - `RS_SPIKE_3C_3_PERFORMANCE_REPORT.md`
+  - Visual comparison boards and reference comparison images.
+- [ ] G.4 Conclude with final engineering verdict (PASS / CONDITIONAL PASS / FAIL).

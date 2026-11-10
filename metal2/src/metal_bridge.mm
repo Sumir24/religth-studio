@@ -42,6 +42,12 @@ struct PersistentBufferPool {
     id<MTLBuffer> buf_ab = nil;         // float2
     id<MTLBuffer> buf_ab_tmp = nil;     // float2
     id<MTLBuffer> buf_mean_ab = nil;    // float2
+
+    // Environment Map Buffers
+    id<MTLBuffer> buf_env_irr = nil;
+    id<MTLBuffer> buf_env_spec_04 = nil;
+    id<MTLBuffer> buf_env_spec_50 = nil;
+    id<MTLBuffer> buf_brdf_lut = nil;
     
     uint32_t alloc_count = 0;
     uint32_t steady_frames = 0;
@@ -345,6 +351,64 @@ int metal2_dispatch_oklab_gamut_map(
     }
 }
 
+int metal2_set_environment_maps(
+    const float* irr_map,
+    uint32_t irr_w,
+    uint32_t irr_h,
+    const float* spec_04,
+    const float* spec_50,
+    uint32_t spec_w,
+    uint32_t spec_h,
+    const float* brdf_lut,
+    uint32_t lut_size
+) {
+    if (!g_device) {
+        int err = metal2_init_device();
+        if (err != METAL_SUCCESS) return err;
+    }
+
+    @autoreleasepool {
+        if (!irr_map || irr_w == 0 || irr_h == 0 ||
+            !spec_04 || !spec_50 || spec_w == 0 || spec_h == 0 ||
+            !brdf_lut || lut_size == 0) {
+            g_buffer_pool.buf_env_irr = nil;
+            g_buffer_pool.buf_env_spec_04 = nil;
+            g_buffer_pool.buf_env_spec_50 = nil;
+            g_buffer_pool.buf_brdf_lut = nil;
+            return METAL_SUCCESS;
+        }
+
+        size_t irr_bytes = (size_t)irr_w * irr_h * 3 * sizeof(float);
+        size_t spec_bytes = (size_t)spec_w * spec_h * 3 * sizeof(float);
+        size_t lut_bytes = (size_t)lut_size * lut_size * 2 * sizeof(float);
+
+        if (!g_buffer_pool.buf_env_irr || [g_buffer_pool.buf_env_irr length] < irr_bytes) {
+            g_buffer_pool.buf_env_irr = [g_device newBufferWithLength:irr_bytes options:MTLResourceStorageModeShared];
+        }
+        if (!g_buffer_pool.buf_env_spec_04 || [g_buffer_pool.buf_env_spec_04 length] < spec_bytes) {
+            g_buffer_pool.buf_env_spec_04 = [g_device newBufferWithLength:spec_bytes options:MTLResourceStorageModeShared];
+        }
+        if (!g_buffer_pool.buf_env_spec_50 || [g_buffer_pool.buf_env_spec_50 length] < spec_bytes) {
+            g_buffer_pool.buf_env_spec_50 = [g_device newBufferWithLength:spec_bytes options:MTLResourceStorageModeShared];
+        }
+        if (!g_buffer_pool.buf_brdf_lut || [g_buffer_pool.buf_brdf_lut length] < lut_bytes) {
+            g_buffer_pool.buf_brdf_lut = [g_device newBufferWithLength:lut_bytes options:MTLResourceStorageModeShared];
+        }
+
+        if (!g_buffer_pool.buf_env_irr || !g_buffer_pool.buf_env_spec_04 ||
+            !g_buffer_pool.buf_env_spec_50 || !g_buffer_pool.buf_brdf_lut) {
+            return METAL_ERROR_BUFFER_ALLOCATION;
+        }
+
+        memcpy([g_buffer_pool.buf_env_irr contents], irr_map, irr_bytes);
+        memcpy([g_buffer_pool.buf_env_spec_04 contents], spec_04, spec_bytes);
+        memcpy([g_buffer_pool.buf_env_spec_50 contents], spec_50, spec_bytes);
+        memcpy([g_buffer_pool.buf_brdf_lut contents], brdf_lut, lut_bytes);
+
+        return METAL_SUCCESS;
+    }
+}
+
 int metal2_render_frame(
     const CCameraParams* cam,
     const CProxyParams* proxy,
@@ -363,9 +427,10 @@ int metal2_render_frame(
     float* out_visibility,
     float* out_irradiance,
     float* out_specular,
-    float* out_gpu_time_ms
+    float* out_gpu_time_ms,
+    const CEnvironmentParams* env_params
 ) {
-    if (!cam || !proxy || !receiver || !lights || num_lights == 0 || !depth_map || !normals_map ||
+    if (!cam || !proxy || !receiver || !depth_map || !normals_map ||
         !image_orig_srgb || !out_relit_srgb || !out_visibility || !out_irradiance) {
         return METAL_ERROR_INVALID_ARGUMENT;
     }
@@ -524,11 +589,23 @@ int metal2_render_frame(
         const CMaterialParams* mat_ptr = material ? material : &default_mat;
 
         // --- PASS 1: Direct 3D Lighting & Shadows ---
+        CLightParams dummy_light;
+        memset(&dummy_light, 0, sizeof(CLightParams));
+        const CLightParams* lights_ptr = (lights && num_lights > 0) ? lights : &dummy_light;
+        size_t lights_bytes = (lights && num_lights > 0) ? (num_lights * sizeof(CLightParams)) : sizeof(CLightParams);
+
+        CEnvironmentParams default_env;
+        memset(&default_env, 0, sizeof(CEnvironmentParams));
+        CEnvironmentParams env_copy = env_params ? *env_params : default_env;
+        if (!g_buffer_pool.buf_env_irr || !g_buffer_pool.buf_brdf_lut) {
+            env_copy.has_env_map = 0;
+        }
+
         [encoder setComputePipelineState:g_render_pso];
         [encoder setBytes:cam length:sizeof(CCameraParams) atIndex:0];
         [encoder setBytes:proxy length:sizeof(CProxyParams) atIndex:1];
         [encoder setBytes:receiver length:sizeof(CReceiverParams) atIndex:2];
-        [encoder setBytes:lights length:num_lights * sizeof(CLightParams) atIndex:3];
+        [encoder setBytes:lights_ptr length:lights_bytes atIndex:3];
         if (g_buffer_pool.buf_triangles && num_triangles > 0) {
             [encoder setBuffer:g_buffer_pool.buf_triangles offset:0 atIndex:4];
         } else {
@@ -546,6 +623,18 @@ int metal2_render_frame(
         [encoder setBytes:&num_lights length:sizeof(uint32_t) atIndex:14];
         [encoder setBytes:mat_ptr length:sizeof(CMaterialParams) atIndex:15];
         [encoder setBuffer:g_buffer_pool.buf_out_spec offset:0 atIndex:16];
+        [encoder setBytes:&env_copy length:sizeof(CEnvironmentParams) atIndex:17];
+        if (g_buffer_pool.buf_env_irr) {
+            [encoder setBuffer:g_buffer_pool.buf_env_irr offset:0 atIndex:18];
+            [encoder setBuffer:g_buffer_pool.buf_env_spec_04 offset:0 atIndex:19];
+            [encoder setBuffer:g_buffer_pool.buf_env_spec_50 offset:0 atIndex:20];
+            [encoder setBuffer:g_buffer_pool.buf_brdf_lut offset:0 atIndex:21];
+        } else {
+            [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:18];
+            [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:19];
+            [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:20];
+            [encoder setBuffer:g_buffer_pool.buf_depth offset:0 atIndex:21];
+        }
         [encoder dispatchThreadgroups:numGroups threadsPerThreadgroup:threadsPerGroup];
 
         // --- PASS 2: E.1 Guidance & Target Shading Ratio Initialization ---
@@ -690,6 +779,10 @@ int metal2_reset_buffer_pool(void) {
     g_buffer_pool.buf_ab = nil;
     g_buffer_pool.buf_ab_tmp = nil;
     g_buffer_pool.buf_mean_ab = nil;
+    g_buffer_pool.buf_env_irr = nil;
+    g_buffer_pool.buf_env_spec_04 = nil;
+    g_buffer_pool.buf_env_spec_50 = nil;
+    g_buffer_pool.buf_brdf_lut = nil;
     g_buffer_pool.width = 0;
     g_buffer_pool.height = 0;
     g_buffer_pool.alloc_count = 0;

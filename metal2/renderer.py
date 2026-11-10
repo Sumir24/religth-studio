@@ -23,7 +23,7 @@ from studio3a.geometry import LowPolyMesh, euler_to_rotation_matrix
 from studio3a.lighting import kelvin_to_linear_rgb, RectangularAreaLight
 from metal2.bridge import (
     Metal2Bridge, CCameraParams, CProxyParams, CReceiverParams,
-    CLightParams, CTriangleMesh, CMaterialParams
+    CLightParams, CTriangleMesh, CMaterialParams, CEnvironmentParams
 )
 
 
@@ -34,6 +34,7 @@ class MetalRenderBackend:
     def __init__(self):
         self.bridge = Metal2Bridge.get_instance()
         self._last_diagnostics: Dict[str, Any] = {}
+        self._cached_env_key: Optional[str] = None
 
     def render(
         self,
@@ -224,6 +225,64 @@ class MetalRenderBackend:
         c_mat.enable_specular = 1 if getattr(scene.render_settings, "enable_specular", True) else 0
         c_mat.specular_only = 1 if getattr(scene.render_settings, "specular_only", False) else 0
 
+        # 5.1 Environment Transport
+        c_env = CEnvironmentParams()
+        env_data = getattr(scene, "environment", None)
+        if env_data is not None and env_data.enabled and env_data.intensity > 1e-4:
+            from studio3a.environment import PreintegratedBRDFLUT, EnvironmentMapProcessor
+            from benchmarks.reference_ibl.synthetic_studio_env import SyntheticStudioEnvironment
+
+            env_key = f"{env_data.id}_{env_data.asset_path}"
+            if self._cached_env_key != env_key:
+                if env_data.asset_path and os.path.exists(env_data.asset_path):
+                    import cv2
+                    hdr_img = cv2.imread(env_data.asset_path, cv2.IMREAD_UNCHANGED)
+                    if hdr_img is not None:
+                        if hdr_img.dtype == np.uint8:
+                            env_map = (hdr_img.astype(np.float32) / 255.0) ** 2.2
+                        else:
+                            env_map = hdr_img.astype(np.float32)
+                        if len(env_map.shape) == 3 and env_map.shape[2] == 3:
+                            env_map = cv2.cvtColor(env_map, cv2.COLOR_BGR2RGB)
+                    else:
+                        env_map = SyntheticStudioEnvironment(width=512, height=256).data
+                else:
+                    env_map = SyntheticStudioEnvironment(width=512, height=256).data
+
+                irr_map = EnvironmentMapProcessor.compute_diffuse_irradiance_map(
+                    env_map, out_width=128, out_height=64, n_samples=128
+                )
+                spec_04 = EnvironmentMapProcessor.compute_specular_prefiltered_map(
+                    env_map, roughness=0.04, out_width=128, out_height=64, n_samples=128
+                )
+                spec_50 = EnvironmentMapProcessor.compute_specular_prefiltered_map(
+                    env_map, roughness=0.50, out_width=128, out_height=64, n_samples=128
+                )
+                brdf_lut = PreintegratedBRDFLUT.get_lut(size=256, n_samples=256)
+
+                self.bridge.set_environment_maps(irr_map, spec_04, spec_50, brdf_lut)
+                self._cached_env_key = env_key
+
+            c_env.enabled = 1
+            c_env.intensity = float(env_data.intensity)
+            c_env.rotation_rad = float(math.radians(env_data.rotation_deg))
+            c_env.diffuse_weight = float(env_data.diffuse_weight)
+            c_env.specular_weight = float(env_data.specular_weight)
+            c_env.tint_rgb[0] = float(env_data.tint_rgb[0])
+            c_env.tint_rgb[1] = float(env_data.tint_rgb[1])
+            c_env.tint_rgb[2] = float(env_data.tint_rgb[2])
+            c_env.has_env_map = 1
+        else:
+            c_env.enabled = 0
+            c_env.intensity = 0.0
+            c_env.rotation_rad = 0.0
+            c_env.diffuse_weight = 1.0
+            c_env.specular_weight = 1.0
+            c_env.tint_rgb[0] = 1.0
+            c_env.tint_rgb[1] = 1.0
+            c_env.tint_rgb[2] = 1.0
+            c_env.has_env_map = 0
+
         # 6. Execute on Metal GPU
         out_relit, out_vis, out_irr, out_spec, gpu_time_ms = self.bridge.render_frame(
             cam_params=c_cam,
@@ -236,7 +295,8 @@ class MetalRenderBackend:
             fg_mask=fg_mask,
             protected_mask=protected_mask,
             image_orig_srgb=image_orig_srgb,
-            material_params=c_mat
+            material_params=c_mat,
+            env_params=c_env
         )
 
         total_wall_ms = (time.time() - t0) * 1000.0

@@ -1,0 +1,35 @@
+[
+  {
+    "case_id": "P1_nike_sneaker",
+    "title": "Nike Sneaker (Commercial Footwear)",
+    "resolution": "576x1024",
+    "direct_fg_dci": 0.9886,
+    "hybrid_fg_dci": 0.9346,
+    "whole_dci": 0.9553,
+    "protected_error_max": 0.0,
+    "specular_peak": 0.0317,
+    "specular_mean": 0.0027
+  },
+  {
+    "case_id": "P2_classical_statue",
+    "title": "Classical Statue (Sculpted Marble)",
+    "resolution": "576x1024",
+    "direct_fg_dci": 0.971,
+    "hybrid_fg_dci": 0.9908,
+    "whole_dci": 0.9918,
+    "protected_error_max": 0.0,
+    "specular_peak": 0.458,
+    "specular_mean": 0.0257
+  },
+  {
+    "case_id": "P3_architectural_relief",
+    "title": "Architectural Relief (Weathered Stone)",
+    "resolution": "768x512",
+    "direct_fg_dci": 0.9994,
+    "hybrid_fg_dci": 0.9781,
+    "whole_dci": 0.9841,
+    "protected_error_max": 0.0,
+    "specular_peak": 0.3757,
+    "specular_mean": 0.0336
+  }
+]
