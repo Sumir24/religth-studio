@@ -1,8 +1,8 @@
 /**
- * RELIGHT STUDIO — RS-PRODUCT-1.0
+ * RELIGHT STUDIO — RS-PRODUCT-1.1
  * Studio Workspace Client Application
- * Handles dual-viewport rendering, 3D gizmo interactions, hierarchy tree,
- * inspector binding, and non-destructive project persistence.
+ * Authoritative 3D interaction engine, real-time gizmo manipulation,
+ * dual-viewport rendering, dynamic preview quality, and photographic control.
  */
 
 // Application State
@@ -18,24 +18,29 @@ const state = {
   isPanningPhoto: false,
   lastMousePhoto: { x: 0, y: 0 },
   
-  // 3D Stage Viewport Orbit/Pan
+  // 3D Stage Viewport Orbit/Pan/Interaction
   stageOrbit: { yaw: 35.0, pitch: 25.0, dist: 3.8 },
   isOrbitingStage: false,
   isPanningStage: false,
   lastMouseStage: { x: 0, y: 0 },
+  mouseDownPos: { x: 0, y: 0 },
+  
+  // Interactive 3D Gizmo & Picking
+  projectionMeta: null,
+  activeGizmoAxis: null,
+  hoverGizmoAxis: null,
+  hoverTarget: null,
+  isDraggingGizmo: false,
+  isInteracting: false,
   
   // Cached Viewport Images
   photoImg: new Image(),
   origImg: new Image(),
   stageImg: new Image(),
   
-  // Dragging Gizmo
-  activeGizmoAxis: null,
-  isDraggingGizmo: false,
-  gizmoStartPos: { x: 0, y: 0, z: 0 },
-  
-  // Debounce Timer
-  sliderDebounceTimer: null
+  // Debounce & Progressive Timer
+  sliderDebounceTimer: null,
+  dragThrottleTimer: null
 };
 
 // DOM References
@@ -100,6 +105,9 @@ async function refreshAll() {
     renderHierarchy(data.hierarchy);
     renderInspector(data.inspector);
     
+    // Fetch 3D Projection Meta for Gizmos & Hit-Testing
+    fetchProjectionMeta();
+
     // Update Photograph image
     if (data.photo_image_url) {
       state.photoImg.onload = () => {
@@ -126,7 +134,17 @@ async function refreshAll() {
   }
 }
 
+async function fetchProjectionMeta() {
+  try {
+    const res = await fetch("/api/stage/projection_meta?width=640&height=480");
+    state.projectionMeta = await res.json();
+  } catch (err) {
+    console.error("Failed to fetch projection meta:", err);
+  }
+}
+
 function setStatus(type, msg) {
+  if (!statusPill || !statusText) return;
   statusPill.className = `status-pill ${type}`;
   statusText.textContent = msg;
 }
@@ -148,7 +166,7 @@ function renderPhotoViewport() {
   const H = photoCanvas.height;
   photoCtx.clearRect(0, 0, W, H);
   
-  // Background checkboard for alpha/transparency
+  // Background checkboard for transparency inspection
   drawCheckerboard(photoCtx, W, H);
   
   const imgW = state.photoImg.naturalWidth;
@@ -224,7 +242,7 @@ function renderStageViewport() {
   const H = stageCanvas.height;
   stageCtx.clearRect(0, 0, W, H);
   
-  // Fit stage image onto canvas while preserving aspect ratio
+  // Fit stage image onto canvas preserving aspect ratio
   const imgW = state.stageImg.naturalWidth;
   const imgH = state.stageImg.naturalHeight;
   const scale = Math.min(W / imgW, H / imgH);
@@ -234,7 +252,158 @@ function renderStageViewport() {
   const dy = (H - dh) / 2;
   
   stageCtx.drawImage(state.stageImg, dx, dy, dw, dh);
+
+  // Draw Interactive Gizmo Axis Highlight if hovering/dragging
+  if (state.projectionMeta && state.projectionMeta.gizmo) {
+    const g = state.projectionMeta.gizmo;
+    const ax = state.activeGizmoAxis || state.hoverGizmoAxis;
+    if (ax) {
+      stageCtx.save();
+      stageCtx.lineWidth = 3.5;
+      const c = toCanvasCoords(g.center[0], g.center[1], dx, dy, scale);
+
+      if (ax === "X" && g.axis_x) {
+        const p = toCanvasCoords(g.axis_x[0], g.axis_x[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#ff4444";
+        stageCtx.beginPath();
+        stageCtx.moveTo(c.x, c.y);
+        stageCtx.lineTo(p.x, p.y);
+        stageCtx.stroke();
+        stageCtx.fillStyle = "#ff4444";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        stageCtx.fill();
+      } else if (ax === "Y" && g.axis_y) {
+        const p = toCanvasCoords(g.axis_y[0], g.axis_y[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#44ff44";
+        stageCtx.beginPath();
+        stageCtx.moveTo(c.x, c.y);
+        stageCtx.lineTo(p.x, p.y);
+        stageCtx.stroke();
+        stageCtx.fillStyle = "#44ff44";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        stageCtx.fill();
+      } else if (ax === "Z" && g.axis_z) {
+        const p = toCanvasCoords(g.axis_z[0], g.axis_z[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#4488ff";
+        stageCtx.beginPath();
+        stageCtx.moveTo(c.x, c.y);
+        stageCtx.lineTo(p.x, p.y);
+        stageCtx.stroke();
+        stageCtx.fillStyle = "#4488ff";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        stageCtx.fill();
+      } else if (ax === "PITCH" && g.rot_pitch) {
+        const p = toCanvasCoords(g.rot_pitch[0], g.rot_pitch[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#f59e0b";
+        stageCtx.fillStyle = "#f59e0b";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+        stageCtx.stroke();
+        stageCtx.fill();
+      } else if (ax === "YAW" && g.rot_yaw) {
+        const p = toCanvasCoords(g.rot_yaw[0], g.rot_yaw[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#06b6d4";
+        stageCtx.fillStyle = "#06b6d4";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+        stageCtx.stroke();
+        stageCtx.fill();
+      }
+      stageCtx.restore();
+    }
+  }
+
   orbitInfo.textContent = `Yaw: ${state.stageOrbit.yaw.toFixed(0)}° | Pitch: ${state.stageOrbit.pitch.toFixed(0)}°`;
+}
+
+function toCanvasCoords(ix, iy, dx, dy, scale) {
+  return { x: dx + ix * scale, y: dy + iy * scale };
+}
+
+function toImageCoords(cx, cy) {
+  if (!state.stageImg.naturalWidth) return { ix: 0, iy: 0, inside: false };
+  const W = stageCanvas.width;
+  const H = stageCanvas.height;
+  const imgW = state.stageImg.naturalWidth;
+  const imgH = state.stageImg.naturalHeight;
+  const scale = Math.min(W / imgW, H / imgH);
+  const dw = imgW * scale;
+  const dh = imgH * scale;
+  const dx = (W - dw) / 2;
+  const dy = (H - dh) / 2;
+
+  const ix = (cx - dx) / scale;
+  const iy = (cy - dy) / scale;
+  const inside = (cx >= dx && cx <= dx + dw && cy >= dy && cy <= dy + dh);
+  return { ix, iy, inside, scale };
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const l2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+  if (l2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+}
+
+function hitTestStage(cx, cy) {
+  if (!state.projectionMeta) return { type: "none" };
+  const { ix, iy, inside } = toImageCoords(cx, cy);
+  if (!inside) return { type: "none" };
+
+  const meta = state.projectionMeta;
+
+  // 1. Gizmo handles for selected light
+  if (meta.gizmo) {
+    const g = meta.gizmo;
+    const tol = 16.0;
+
+    // Pitch ring handle
+    if (g.rot_pitch && Math.hypot(ix - g.rot_pitch[0], iy - g.rot_pitch[1]) < tol) {
+      return { type: "gizmo", axis: "PITCH" };
+    }
+    // Yaw ring handle
+    if (g.rot_yaw && Math.hypot(ix - g.rot_yaw[0], iy - g.rot_yaw[1]) < tol) {
+      return { type: "gizmo", axis: "YAW" };
+    }
+    // Axis X
+    if (g.axis_x && distToSegment(ix, iy, g.center[0], g.center[1], g.axis_x[0], g.axis_x[1]) < tol * 0.8) {
+      return { type: "gizmo", axis: "X" };
+    }
+    // Axis Y
+    if (g.axis_y && distToSegment(ix, iy, g.center[0], g.center[1], g.axis_y[0], g.axis_y[1]) < tol * 0.8) {
+      return { type: "gizmo", axis: "Y" };
+    }
+    // Axis Z
+    if (g.axis_z && distToSegment(ix, iy, g.center[0], g.center[1], g.axis_z[0], g.axis_z[1]) < tol * 0.8) {
+      return { type: "gizmo", axis: "Z" };
+    }
+    // Center handle
+    if (g.center && Math.hypot(ix - g.center[0], iy - g.center[1]) < tol) {
+      return { type: "gizmo", axis: "X" };
+    }
+  }
+
+  // 2. Lights in scene
+  if (meta.lights) {
+    for (const l of meta.lights) {
+      if (l.center && Math.hypot(ix - l.center[0], iy - l.center[1]) < 22.0) {
+        return { type: "light", id: l.id };
+      }
+    }
+  }
+
+  // 3. Subject proxy
+  if (meta.subject && meta.subject.visible && meta.subject.center) {
+    if (Math.hypot(ix - meta.subject.center[0], iy - meta.subject.center[1]) < 28.0) {
+      return { type: "subject", id: "subject" };
+    }
+  }
+
+  return { type: "none" };
 }
 
 // --------------------------------------------------------------------------
@@ -339,11 +508,42 @@ function renderInspector(data) {
 }
 
 function renderLightInspector(light) {
+  // 1. Lighting Starter Presets
+  const secPreset = createSection("Photographic Lighting Presets");
+  const grid = document.createElement("div");
+  grid.className = "preset-grid";
+  const presets = [
+    { label: "Key Softbox", id: "key_softbox" },
+    { label: "Fill Softbox", id: "fill_softbox" },
+    { label: "Rim Strip", id: "rim_strip" },
+    { label: "Top Softbox", id: "top_light" },
+    { label: "Side Rake", id: "side_light" }
+  ];
+  presets.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "btn-light-preset";
+    btn.textContent = p.label;
+    btn.addEventListener("click", async () => {
+      await fetch("/api/light/preset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: p.id, id: light.id })
+      });
+      refreshAll();
+    });
+    grid.appendChild(btn);
+  });
+  secPreset.appendChild(grid);
+  inspectorContent.appendChild(secPreset);
+
+  // 2. Identity
   const secName = createSection("Identity");
   secName.appendChild(createTextInputRow("Name", light.name, (val) => {
     dispatchMutation("/api/light/update", { id: light.id, name: val });
   }));
+  inspectorContent.appendChild(secName);
   
+  // 3. 3D Transform & Dimensions
   const secTransform = createSection("3D Transform & Size");
   secTransform.appendChild(createSliderRow("Pos X (m)", -3.0, 3.0, 0.05, light.position[0], (v) => {
     light.position[0] = v;
@@ -371,7 +571,9 @@ function renderLightInspector(light) {
   secTransform.appendChild(createSliderRow("Height (m)", 0.1, 2.5, 0.05, light.height, (v) => {
     dispatchMutation("/api/light/transform", { id: light.id, height: v });
   }));
+  inspectorContent.appendChild(secTransform);
   
+  // 4. Photometric Emission
   const secEmission = createSection("Photometric Emission");
   secEmission.appendChild(createSliderRow("Intensity", 0.0, 5.0, 0.05, light.intensity, (v) => {
     dispatchMutation("/api/light/properties", { id: light.id, intensity: v });
@@ -388,36 +590,57 @@ function renderLightInspector(light) {
   secEmission.appendChild(createCheckboxRow("Light Enabled", light.enabled, (v) => {
     dispatchMutation("/api/light/properties", { id: light.id, enabled: v });
   }));
-  
-  inspectorContent.appendChild(secName);
-  inspectorContent.appendChild(secTransform);
   inspectorContent.appendChild(secEmission);
 }
 
-function renderMaterialInspector(mat) {
+function renderMaterialInspector(subj) {
+  // 1. Subject Approximate 3D Geometry
+  const secProxy = createSection("Approximate 3D Geometry");
+  secProxy.appendChild(createSelectRow("Proxy Type", ["SPHERE", "CYLINDER", "BOX"], subj.proxy_type || "SPHERE", (v) => {
+    dispatchMutation("/api/subject/params", { proxy_type: v });
+  }));
+  const dims = subj.dimensions || [0.4, 0.4, 0.4];
+  secProxy.appendChild(createSliderRow("Dim X / Radius (m)", 0.05, 2.0, 0.05, dims[0], (v) => {
+    dims[0] = v;
+    dispatchMutation("/api/subject/params", { dimensions: dims });
+  }));
+  secProxy.appendChild(createSliderRow("Dim Y / Height (m)", 0.05, 2.0, 0.05, dims[1], (v) => {
+    dims[1] = v;
+    dispatchMutation("/api/subject/params", { dimensions: dims });
+  }));
+  secProxy.appendChild(createSliderRow("Dim Z / Depth (m)", 0.05, 2.0, 0.05, dims[2], (v) => {
+    dims[2] = v;
+    dispatchMutation("/api/subject/params", { dimensions: dims });
+  }));
+  secProxy.appendChild(createSliderRow("Elevation Y (m)", -1.0, 1.0, 0.05, subj.position_y !== undefined ? subj.position_y : 0.0, (v) => {
+    dispatchMutation("/api/subject/params", { position_y: v });
+  }));
+  inspectorContent.appendChild(secProxy);
+
+  // 2. PBR Material Profile
   const secProfile = createSection("PBR Material Profile");
   secProfile.appendChild(createSelectRow("Preset", ["Custom", "Fabric", "Marble", "Plastic", "Rough Metal", "Polished Metal"], "Custom", (v) => {
     dispatchMutation("/api/material/profile", { profile: v });
   }));
+  inspectorContent.appendChild(secProfile);
   
+  // 3. Microfacet BRDF
   const secProps = createSection("Microfacet BRDF");
-  secProps.appendChild(createSliderRow("Roughness", 0.04, 1.0, 0.02, mat.roughness, (v) => {
+  secProps.appendChild(createSliderRow("Roughness", 0.04, 1.0, 0.02, subj.roughness, (v) => {
     dispatchMutation("/api/material/params", { roughness: v });
   }));
-  secProps.appendChild(createSliderRow("Metallic", 0.0, 1.0, 0.05, mat.metallic, (v) => {
+  secProps.appendChild(createSliderRow("Metallic", 0.0, 1.0, 0.05, subj.metallic, (v) => {
     dispatchMutation("/api/material/params", { metallic: v });
   }));
-  secProps.appendChild(createSliderRow("Specular F0", 0.0, 0.20, 0.01, mat.specular_f0, (v) => {
+  secProps.appendChild(createSliderRow("Specular F0", 0.0, 0.20, 0.01, subj.specular_f0, (v) => {
     dispatchMutation("/api/material/params", { specular_f0: v });
   }));
-  secProps.appendChild(createSliderRow("Intensity", 0.0, 3.0, 0.1, mat.specular_intensity, (v) => {
+  secProps.appendChild(createSliderRow("Intensity", 0.0, 3.0, 0.1, subj.specular_intensity, (v) => {
     dispatchMutation("/api/material/params", { specular_intensity: v });
   }));
-  secProps.appendChild(createCheckboxRow("Enable Specular", mat.enable_specular, (v) => {
+  secProps.appendChild(createCheckboxRow("Enable Specular", subj.enable_specular, (v) => {
     dispatchMutation("/api/material/params", { enable_specular: v });
   }));
-  
-  inspectorContent.appendChild(secProfile);
   inspectorContent.appendChild(secProps);
 }
 
@@ -496,9 +719,18 @@ function createSliderRow(label, min, max, step, val, onChange) {
   num.className = "val-input";
   num.value = Number(val).toFixed(step < 1 ? 2 : 0);
   
+  slider.addEventListener("mousedown", () => {
+    fetch("/api/interaction/begin", { method: "POST" });
+  });
+
   slider.addEventListener("input", () => {
     num.value = Number(slider.value).toFixed(step < 1 ? 2 : 0);
     debounceMutation(() => onChange(parseFloat(slider.value)));
+  });
+
+  slider.addEventListener("mouseup", () => {
+    fetch("/api/interaction/end", { method: "POST" });
+    refreshAll();
   });
   
   num.addEventListener("change", () => {
@@ -599,6 +831,12 @@ function setupEventHandlers() {
   });
   
   window.addEventListener("mouseup", () => {
+    if (state.isDraggingGizmo) {
+      state.isDraggingGizmo = false;
+      state.activeGizmoAxis = null;
+      fetch("/api/interaction/end", { method: "POST" });
+      refreshAll();
+    }
     state.isDraggingSplit = false;
     state.isPanningPhoto = false;
     state.isOrbitingStage = false;
@@ -659,29 +897,113 @@ function setupEventHandlers() {
     renderPhotoViewport();
   });
   
-  // 3D Stage Viewport Orbit & Pan
+  // 3D Stage Viewport: Hit-Testing, Gizmo Dragging, Orbit & Pan
   stageCanvas.addEventListener("mousedown", (e) => {
+    const rect = stageCanvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    state.mouseDownPos = { x: cx, y: cy };
+    state.lastMouseStage = { x: cx, y: cy };
+
+    const hit = hitTestStage(cx, cy);
+
+    if (hit.type === "gizmo") {
+      state.activeGizmoAxis = hit.axis;
+      state.isDraggingGizmo = true;
+      fetch("/api/interaction/begin", { method: "POST" });
+      renderStageViewport();
+      return;
+    } else if (hit.type === "light") {
+      selectObject(hit.id);
+      return;
+    } else if (hit.type === "subject") {
+      selectObject("subject");
+      return;
+    }
+
+    // Otherwise orbit or pan stage camera
     if (e.shiftKey || e.button === 1) {
       state.isPanningStage = true;
     } else {
       state.isOrbitingStage = true;
     }
-    state.lastMouseStage = { x: e.clientX, y: e.clientY };
   });
   
   stageCanvas.addEventListener("mousemove", (e) => {
+    const rect = stageCanvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    if (state.isDraggingGizmo && state.activeGizmoAxis) {
+      const dx = cx - state.lastMouseStage.x;
+      const dy = cy - state.lastMouseStage.y;
+      state.lastMouseStage = { x: cx, y: cy };
+
+      // Map canvas pixels to projection image space
+      const { scale } = toImageCoords(cx, cy);
+      const scaledDx = dx / (scale || 1.0);
+      const scaledDy = dy / (scale || 1.0);
+
+      // Perform real-time drag mutation
+      fetch("/api/stage/drag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          axis: state.activeGizmoAxis,
+          dx: scaledDx,
+          dy: scaledDy,
+          width: 640,
+          height: 480
+        })
+      }).then(() => {
+        // Fast-path reload stage and relit buffers
+        state.stageImg.src = "/api/images/stage?t=" + Date.now();
+        state.photoImg.src = "/api/images/photo?t=" + Date.now();
+      });
+      return;
+    }
+
     if (state.isOrbitingStage) {
-      const dx = e.clientX - state.lastMouseStage.x;
-      const dy = e.clientY - state.lastMouseStage.y;
+      const dx = cx - state.lastMouseStage.x;
+      const dy = cy - state.lastMouseStage.y;
       state.stageOrbit.yaw += dx * 0.5;
       state.stageOrbit.pitch = Math.max(-85, Math.min(85, state.stageOrbit.pitch + dy * 0.5));
-      state.lastMouseStage = { x: e.clientX, y: e.clientY };
+      state.lastMouseStage = { x: cx, y: cy };
       
       debounceMutation(async () => {
         await fetch(`/api/stage/orbit?yaw=${state.stageOrbit.yaw}&pitch=${state.stageOrbit.pitch}`, { method: "POST" });
-        refreshAll();
+        state.stageImg.src = "/api/images/stage?t=" + Date.now();
+        fetchProjectionMeta();
       });
+      return;
     }
+
+    if (state.isPanningStage) {
+      const dx = (cx - state.lastMouseStage.x) * 0.005;
+      const dy = (cy - state.lastMouseStage.y) * 0.005;
+      state.lastMouseStage = { x: cx, y: cy };
+
+      debounceMutation(async () => {
+        await fetch(`/api/stage/orbit?pan_x=${dx}&pan_y=${dy}`, { method: "POST" });
+        state.stageImg.src = "/api/images/stage?t=" + Date.now();
+        fetchProjectionMeta();
+      });
+      return;
+    }
+
+    // Hover hit-testing and cursor feedback
+    const hit = hitTestStage(cx, cy);
+    if (hit.type === "gizmo") {
+      stageCanvas.style.cursor = "grab";
+      state.hoverGizmoAxis = hit.axis;
+    } else if (hit.type === "light" || hit.type === "subject") {
+      stageCanvas.style.cursor = "pointer";
+      state.hoverGizmoAxis = null;
+    } else {
+      stageCanvas.style.cursor = "default";
+      state.hoverGizmoAxis = null;
+    }
+    renderStageViewport();
   });
   
   stageCanvas.addEventListener("wheel", (e) => {
@@ -690,13 +1012,18 @@ function setupEventHandlers() {
     state.stageOrbit.dist = Math.max(1.0, Math.min(10.0, state.stageOrbit.dist * factor));
     debounceMutation(async () => {
       await fetch(`/api/stage/orbit?dist=${state.stageOrbit.dist}`, { method: "POST" });
-      refreshAll();
+      state.stageImg.src = "/api/images/stage?t=" + Date.now();
+      fetchProjectionMeta();
     });
   }, { passive: false });
   
+  document.getElementById("btn-focus-stage-cam").addEventListener("click", async () => {
+    await fetch("/api/stage/focus", { method: "POST" });
+    refreshAll();
+  });
+
   document.getElementById("btn-reset-stage-cam").addEventListener("click", async () => {
-    state.stageOrbit = { yaw: 35.0, pitch: 25.0, dist: 3.8 };
-    await fetch(`/api/stage/orbit?yaw=35&pitch=25&dist=3.8`, { method: "POST" });
+    await fetch("/api/stage/reset", { method: "POST" });
     refreshAll();
   });
   

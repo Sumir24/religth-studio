@@ -776,3 +776,36 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 8px;
   padding: 0 14px;
 }
+
+/* Lighting Presets Grid */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.btn-light-preset {
+  background-color: var(--bg-input);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.btn-light-preset:hover {
+  background-color: var(--bg-input-hover);
+  color: var(--text-main);
+  border-color: var(--accent-gold);
+}
+
+.btn-light-preset.active {
+  background-color: #27272a;
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
