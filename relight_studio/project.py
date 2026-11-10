@@ -1,8 +1,9 @@
 """
-RELIGHT STUDIO — RS-PRODUCT-1.0
+RELIGHT STUDIO — RS-PRODUCT-1.1
 ================================
 Project Management & Non-Destructive Bundle Specification
-Handles creation, serialization, deserialization, and asset preservation for .relight project bundles.
+Handles creation, serialization, deserialization, transactional atomic saving,
+and asset preservation for .relight project bundles.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import os
 import json
 import time
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
@@ -31,9 +33,9 @@ class RelightProject:
     """
     Authoritative Relight Studio project representation.
     Ensures non-destructive source image handling, relative asset resolution,
-    and complete scene serialization.
+    transactional atomic saving, and complete scene serialization.
     """
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(
         self,
@@ -146,53 +148,72 @@ class RelightProject:
 
     def save(self, bundle_path: str) -> str:
         """
-        Saves project into a portable .relight directory bundle:
-          bundle_path/
-            project.json
-            scene.json
-            source/
-              original_image.<ext>
+        Transactionally saves project into a portable .relight directory bundle.
+        Uses temporary directory staging to guarantee that interrupted saves never
+        corrupt an existing valid project bundle.
         """
         bundle_dir = Path(bundle_path)
         if not str(bundle_dir).endswith(".relight"):
             bundle_dir = Path(str(bundle_dir) + ".relight")
 
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-        source_dir = bundle_dir / "source"
-        source_dir.mkdir(parents=True, exist_ok=True)
+        parent_dir = bundle_dir.parent
+        parent_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy original image if not already inside the bundle
-        target_img_name = "original_image" + os.path.splitext(self.image_path)[1]
-        target_img_path = source_dir / target_img_name
+        temp_dir = Path(tempfile.mkdtemp(prefix=".relight_staging_", dir=parent_dir))
+        try:
+            source_dir = temp_dir / "source"
+            source_dir.mkdir(parents=True, exist_ok=True)
 
-        if os.path.abspath(self.image_path) != os.path.abspath(target_img_path):
-            shutil.copy2(self.image_path, target_img_path)
+            # Copy original image if available
+            rel_img_path = "source/original_image.png"
+            if self.image_path and os.path.exists(self.image_path):
+                ext = os.path.splitext(self.image_path)[1] or ".png"
+                target_img_name = f"original_image{ext}"
+                target_img_path = source_dir / target_img_name
+                shutil.copy2(self.image_path, target_img_path)
+                rel_img_path = str(Path("source") / target_img_name)
 
-        # Save project manifest with relative asset path
-        rel_img_path = os.path.relpath(target_img_path, bundle_dir)
-        manifest = {
-            "version": self.VERSION,
-            "project_id": self.project_id,
-            "name": self.name,
-            "created_at": self.created_at,
-            "modified_at": time.time(),
-            "image_file": rel_img_path,
-            "scene_file": "scene.json"
-        }
+            manifest = {
+                "version": self.VERSION,
+                "project_id": self.project_id,
+                "name": self.name,
+                "created_at": self.created_at,
+                "modified_at": time.time(),
+                "image_file": rel_img_path,
+                "scene_file": "scene.json"
+            }
 
-        with open(bundle_dir / "project.json", "w") as f:
-            json.dump(manifest, f, indent=2)
+            with open(temp_dir / "project.json", "w") as f:
+                json.dump(manifest, f, indent=2)
 
-        with open(bundle_dir / "scene.json", "w") as f:
-            f.write(self.scene.to_json(indent=2))
+            with open(temp_dir / "scene.json", "w") as f:
+                f.write(self.scene.to_json(indent=2))
 
-        self.project_dir = str(bundle_dir)
-        self.modified_at = manifest["modified_at"]
-        return str(bundle_dir)
+            # Atomic swap
+            if bundle_dir.exists():
+                backup_dir = Path(tempfile.mkdtemp(prefix=".relight_backup_", dir=parent_dir))
+                shutil.rmtree(backup_dir)
+                os.replace(bundle_dir, backup_dir)
+                try:
+                    os.replace(temp_dir, bundle_dir)
+                    shutil.rmtree(backup_dir, ignore_errors=True)
+                except Exception:
+                    os.replace(backup_dir, bundle_dir)
+                    raise
+            else:
+                os.replace(temp_dir, bundle_dir)
+
+            self.project_dir = str(bundle_dir)
+            self.modified_at = manifest["modified_at"]
+            return str(bundle_dir)
+
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     @classmethod
     def load(cls, bundle_path: str) -> RelightProject:
-        """Loads a project from a .relight bundle."""
+        """Loads a project from a .relight bundle with missing-asset resilience."""
         bundle_dir = Path(bundle_path)
         if not bundle_dir.exists():
             raise FileNotFoundError(f"Project bundle not found: {bundle_path}")
@@ -205,15 +226,30 @@ class RelightProject:
             manifest = json.load(f)
 
         scene_file = bundle_dir / manifest.get("scene_file", "scene.json")
+        if not scene_file.exists():
+            raise FileNotFoundError(f"Invalid bundle: missing scene.json in {bundle_path}")
+
         with open(scene_file, "r") as f:
             scene = StudioScene.from_json(f.read())
 
         img_rel = manifest.get("image_file", "source/original_image.png")
-        img_abs = str((bundle_dir / img_rel).resolve())
+        img_abs = (bundle_dir / img_rel).resolve()
+
+        # Resilient fallback if relative image not at expected path
+        if not img_abs.exists():
+            source_candidates = list((bundle_dir / "source").glob("*"))
+            if source_candidates:
+                img_abs = source_candidates[0].resolve()
+            else:
+                # Fallback to placeholder
+                img_abs = bundle_dir / "source" / "fallback_image.png"
+                img_abs.parent.mkdir(parents=True, exist_ok=True)
+                placeholder = np.full((576, 1024, 3), 128, dtype=np.uint8)
+                Image.fromarray(placeholder).save(img_abs)
 
         proj = cls(
             name=manifest.get("name", bundle_dir.stem),
-            image_path=img_abs,
+            image_path=str(img_abs),
             scene=scene,
             project_dir=str(bundle_dir)
         )
