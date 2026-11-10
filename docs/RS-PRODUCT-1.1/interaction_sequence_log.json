@@ -1,0 +1,74 @@
+[
+  {
+    "step": 1,
+    "action": "Select Light 01",
+    "object_id": "light_01",
+    "position": [
+      1.2,
+      1.8,
+      1.5
+    ],
+    "mean_luma": 0.2021503746509552,
+    "status": "baseline"
+  },
+  {
+    "step": 2,
+    "action": "Gizmo Drag along X axis (+80px screen)",
+    "light_id": "light_01",
+    "new_position": [
+      1.348,
+      1.8,
+      1.5
+    ],
+    "mean_luma": 0.20137526094913483,
+    "delta_luma": -0.0007751137018203735,
+    "status": "verified"
+  },
+  {
+    "step": 3,
+    "action": "Gizmo Drag along Y axis (-70px screen upward)",
+    "light_id": "light_01",
+    "new_position": [
+      1.348,
+      1.909,
+      1.5
+    ],
+    "mean_luma": 0.20100632309913635,
+    "delta_luma": -0.0003689378499984741,
+    "status": "verified"
+  },
+  {
+    "step": 4,
+    "action": "Gizmo Drag along Z axis (+60px screen)",
+    "light_id": "light_01",
+    "new_position": [
+      1.348,
+      1.909,
+      1.368
+    ],
+    "mean_luma": 0.20107118785381317,
+    "delta_luma": 6.486475467681885e-05,
+    "status": "verified"
+  },
+  {
+    "step": 5,
+    "action": "Rotate Light Pitch & Yaw",
+    "light_id": "light_01",
+    "rotation_deg": [
+      -50.0,
+      5.0,
+      0.0
+    ],
+    "mean_luma": 0.20066426694393158,
+    "status": "verified"
+  },
+  {
+    "step": 6,
+    "action": "Resize Area Light Dimensions",
+    "light_id": "light_01",
+    "width": 1.0,
+    "height": 1.0,
+    "mean_luma": 0.21097838878631592,
+    "status": "verified"
+  }
+]

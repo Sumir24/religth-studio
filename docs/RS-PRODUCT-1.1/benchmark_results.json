@@ -1,0 +1,14 @@
+{
+  "preview_p50_ms": 9.230083498550812,
+  "preview_p95_ms": 17.199456098751398,
+  "preview_p99_ms": 18.93161865922593,
+  "preview_fps": 108.34138176073998,
+  "gpu_kernel_ms": 3.7998000000000007,
+  "eight_light_p50_ms": 11.66543749968696,
+  "eight_light_fps": 85.72331728037075,
+  "final_wall_ms": 24.619959000119707,
+  "final_fps": 40.61745188101807,
+  "mem_initial_mb": 3805.515625,
+  "mem_final_mb": 3958.203125,
+  "mem_growth_mb": 152.6875
+}
