@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "project_id": "b4c19466-35d6-41e2-9ed8-4bede6ac29c0",
+  "name": "Commercial Footwear Campaign",
+  "created_at": 1794333889.347091,
+  "modified_at": 1794333902.27358,
+  "image_file": "source/original_image.jpg",
+  "scene_file": "scene.json"
+}

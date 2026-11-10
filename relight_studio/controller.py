@@ -1,0 +1,767 @@
+"""
+RELIGHT STUDIO — RS-PRODUCT-1.0
+================================
+Studio Application Controller
+Authoritative application controller coordinating scene state, projects, selection,
+undo/redo history, 3D stage projection, gizmos, and asynchronous rendering.
+"""
+
+from __future__ import annotations
+
+import os
+import copy
+import time
+import uuid
+import math
+from typing import Dict, Any, Optional, List, Tuple
+import numpy as np
+import cv2
+
+from studio3a.scene import (
+    StudioScene, CameraData, SubjectProxyData, ReceiverData,
+    AreaLightData, RenderSettingsData, ProxyType, ReceiverType,
+    EnergyConvention, RenderQuality, SceneStateManager
+)
+from studio3a.material import MaterialData
+from studio3a.lighting import RectangularAreaLight
+from studio3a.environment import EnvironmentData
+from studio3a.renderer import RenderBackend
+
+from relight_studio.project import RelightProject
+from relight_studio.orchestrator import RenderingOrchestrator
+
+
+class StudioAppController:
+    """
+    Central authoritative controller for the Relight Studio application.
+    Enforces the product architecture:
+      Application UI -> StudioAppController -> Authoritative Scene State ->
+      RenderingOrchestrator -> Rendering Engine -> Photographic Viewport
+    """
+    def __init__(self, sample_image_path: Optional[str] = None, use_metal: bool = True):
+        self.orchestrator = RenderingOrchestrator(use_metal=use_metal)
+        
+        # 3D Stage Viewport Orbit Camera State
+        self.stage_orbit_yaw_deg: float = 35.0
+        self.stage_orbit_pitch_deg: float = 25.0
+        self.stage_orbit_dist: float = 3.8
+        self.stage_pan_offset: List[float] = [0.0, 0.0]
+
+        # Active selection (e.g. 'light_01', 'subject', 'camera', 'receiver', 'environment')
+        self.selected_object_id: str = "light_01"
+
+        # Initialize default project
+        img_path = sample_image_path or "demo_output/nike_sample.jpg"
+        if not os.path.exists(img_path):
+            img_path = "benchmarks/reference_ibl/diagnostic_boards/synthetic_studio_env_preview.png"
+
+        self.project: Optional[RelightProject] = None
+        self.state_manager: Optional[SceneStateManager] = None
+
+        if os.path.exists(img_path):
+            self.new_project(name="Nike Footwear Commercial", image_path=img_path)
+        else:
+            # Create headless fallback scene
+            scene = StudioScene()
+            self.state_manager = SceneStateManager(scene)
+            self.selected_object_id = scene.lights[0].id if scene.lights else "camera"
+
+    # -----------------------------------------------------------------------
+    # 1. PROJECT LIFECYCLE
+    # -----------------------------------------------------------------------
+
+    def new_project(self, name: str, image_path: str) -> None:
+        """Creates a new project from a source photograph."""
+        scene = StudioScene()
+        # Default studio setup: Key light + Rim light
+        scene.lights = [
+            AreaLightData(
+                id="light_01",
+                name="Key Softbox",
+                position=[1.2, 1.8, 1.5],
+                rotation_deg=[-35.0, 30.0, 0.0],
+                width=0.6,
+                height=0.6,
+                intensity=1.2,
+                temperature_kelvin=5600.0,
+                energy_convention=EnergyConvention.FIXED_RADIANCE,
+                cast_shadows=True,
+                enabled=True
+            ),
+            AreaLightData(
+                id="light_02",
+                name="Rim Strip",
+                position=[-1.5, 1.2, 0.8],
+                rotation_deg=[-20.0, -50.0, 0.0],
+                width=0.3,
+                height=1.0,
+                intensity=0.8,
+                temperature_kelvin=6500.0,
+                energy_convention=EnergyConvention.FIXED_RADIANCE,
+                cast_shadows=True,
+                enabled=True
+            )
+        ]
+        scene.active_light_id = "light_01"
+        scene.subject.material = MaterialData.fabric()
+        scene.receiver.receiver_type = ReceiverType.CYCLORAMA
+
+        # Load depth/normal if companion files exist
+        base_dir = os.path.dirname(image_path)
+        stem = os.path.splitext(os.path.basename(image_path))[0]
+        depth_guess = os.path.join("demo_output", "nike_test", "depth.png")
+        normals_guess = os.path.join("demo_output", "nike_test", "normals.png")
+
+        self.project = RelightProject(name=name, image_path=image_path, scene=scene)
+        if os.path.exists(depth_guess) and os.path.exists(normals_guess):
+            self.project.load_image_assets(image_path, depth_guess, normals_guess)
+
+        self.state_manager = SceneStateManager(self.project.scene)
+        self.selected_object_id = "light_01"
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=False)
+
+    def save_project(self, bundle_path: str) -> str:
+        """Saves current project state to a .relight bundle."""
+        if not self.project:
+            raise ValueError("No active project to save.")
+        self.project.scene = self.state_manager.current_scene
+        return self.project.save(bundle_path)
+
+    def open_project(self, bundle_path: str) -> None:
+        """Opens an existing .relight project bundle."""
+        self.project = RelightProject.load(bundle_path)
+        self.state_manager = SceneStateManager(self.project.scene)
+        self.selected_object_id = self.project.scene.lights[0].id if self.project.scene.lights else "camera"
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=False)
+
+    def import_photograph(self, image_path: str) -> None:
+        """Imports and replaces the active photograph in the current project."""
+        if not self.project:
+            self.new_project(name="Untitled Project", image_path=image_path)
+            return
+
+        self.project.load_image_assets(image_path)
+        scene = self.state_manager.current_scene
+        scene.camera.width = self.project.img_orig_srgb.shape[1]
+        scene.camera.height = self.project.img_orig_srgb.shape[0]
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=False)
+
+    # -----------------------------------------------------------------------
+    # 2. SCENE MUTATION & ARTIST ACTIONS
+    # -----------------------------------------------------------------------
+
+    @property
+    def current_scene(self) -> StudioScene:
+        return self.state_manager.current_scene
+
+    def select_object(self, object_id: str) -> None:
+        """Selects an object in the scene hierarchy and 3D stage."""
+        self.selected_object_id = object_id
+        scene = self.current_scene
+        if object_id in [l.id for l in scene.lights]:
+            scene.active_light_id = object_id
+
+    def add_light(self) -> str:
+        """Adds a new studio light and selects it."""
+        scene = self.current_scene
+        new_idx = len(scene.lights) + 1
+        new_id = f"light_{new_idx:02d}"
+        
+        # Position with pleasant studio offset
+        angle = math.radians(45.0 * len(scene.lights))
+        pos_x = 1.6 * math.cos(angle)
+        pos_z = 1.6 * math.sin(angle)
+        
+        new_light = AreaLightData(
+            id=new_id,
+            name=f"Studio Light {new_idx:02d}",
+            position=[round(pos_x, 2), 1.8, round(pos_z, 2)],
+            rotation_deg=[-30.0, round(math.degrees(angle) + 180.0, 1), 0.0],
+            width=0.6,
+            height=0.6,
+            intensity=1.0,
+            temperature_kelvin=5500.0,
+            energy_convention=EnergyConvention.FIXED_RADIANCE,
+            cast_shadows=True,
+            enabled=True
+        )
+        scene.add_light(new_light)
+        self.selected_object_id = new_id
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+        return new_id
+
+    def duplicate_light(self, light_id: Optional[str] = None) -> str:
+        """Duplicates an existing light."""
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        new_light = scene.duplicate_light(target_id)
+        if new_light:
+            self.selected_object_id = new_light.id
+            self.state_manager.push_state(scene)
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+            return new_light.id
+        return target_id
+
+    def delete_light(self, light_id: Optional[str] = None) -> None:
+        """Removes a light from the scene."""
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        scene.remove_light(target_id)
+        if scene.lights:
+            self.selected_object_id = scene.lights[0].id
+        else:
+            self.selected_object_id = "camera"
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def toggle_light_enabled(self, light_id: Optional[str] = None) -> bool:
+        """Toggles light emission on/off."""
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        light = scene.get_light(target_id)
+        if light:
+            light.enabled = not light.enabled
+            self.state_manager.push_state(scene)
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+            return light.enabled
+        return False
+
+    def toggle_light_shadows(self, light_id: Optional[str] = None) -> bool:
+        """Toggles shadow ray-tracing for a light."""
+        target_id = light_id or self.selected_object_id
+        scene = self.current_scene
+        light = scene.get_light(target_id)
+        if light:
+            light.cast_shadows = not light.cast_shadows
+            self.state_manager.push_state(scene)
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+            return light.cast_shadows
+        return False
+
+    def rename_light(self, light_id: str, new_name: str) -> None:
+        """Renames a light in the scene."""
+        scene = self.current_scene
+        light = scene.get_light(light_id)
+        if light:
+            light.name = new_name.strip()
+            self.state_manager.push_state(scene)
+
+    def update_light_transform(
+        self,
+        light_id: str,
+        pos: Optional[List[float]] = None,
+        rot_deg: Optional[List[float]] = None,
+        width: Optional[float] = None,
+        height: Optional[float] = None
+    ) -> None:
+        """Updates light position, orientation, and dimensions."""
+        scene = self.current_scene
+        light = scene.get_light(light_id)
+        if not light:
+            return
+
+        if pos is not None:
+            light.position = [float(p) for p in pos]
+        if rot_deg is not None:
+            light.rotation_deg = [float(r) for r in rot_deg]
+        if width is not None:
+            light.width = max(0.05, float(width))
+        if height is not None:
+            light.height = max(0.05, float(height))
+
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def update_light_properties(
+        self,
+        light_id: str,
+        intensity: Optional[float] = None,
+        temperature_kelvin: Optional[float] = None,
+        energy_convention: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        cast_shadows: Optional[bool] = None
+    ) -> None:
+        """Updates light photometric and radiometric properties."""
+        scene = self.current_scene
+        light = scene.get_light(light_id)
+        if not light:
+            return
+
+        if intensity is not None:
+            light.intensity = max(0.0, float(intensity))
+        if temperature_kelvin is not None:
+            light.temperature_kelvin = max(1000.0, min(12000.0, float(temperature_kelvin)))
+        if energy_convention is not None:
+            light.energy_convention = EnergyConvention(energy_convention)
+        if enabled is not None:
+            light.enabled = bool(enabled)
+        if cast_shadows is not None:
+            light.cast_shadows = bool(cast_shadows)
+
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def set_material_profile(self, profile_name: str) -> None:
+        """Sets subject material from one of the canonical PBR profiles."""
+        p_name = profile_name.lower().replace(" ", "_")
+        if p_name == "fabric":
+            mat = MaterialData.fabric()
+        elif p_name == "marble":
+            mat = MaterialData.marble()
+        elif p_name == "plastic":
+            mat = MaterialData.plastic()
+        elif p_name in ("rough_metal", "rough metal"):
+            mat = MaterialData.rough_metal()
+        elif p_name in ("polished_metal", "polished metal"):
+            mat = MaterialData.polished_metal()
+        else:
+            mat = MaterialData()
+
+        scene = self.current_scene
+        scene.subject.material = mat
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def update_material_params(
+        self,
+        roughness: Optional[float] = None,
+        metallic: Optional[float] = None,
+        specular_f0: Optional[float] = None,
+        specular_intensity: Optional[float] = None,
+        enable_specular: Optional[bool] = None
+    ) -> None:
+        """Updates microfacet BRDF material parameters."""
+        scene = self.current_scene
+        mat = scene.subject.material
+        if roughness is not None:
+            mat.roughness = max(0.04, min(1.0, float(roughness)))
+        if metallic is not None:
+            mat.metallic = max(0.0, min(1.0, float(metallic)))
+        if specular_f0 is not None:
+            mat.specular_f0 = max(0.0, min(0.20, float(specular_f0)))
+        if specular_intensity is not None:
+            mat.specular_intensity = max(0.0, float(specular_intensity))
+        if enable_specular is not None:
+            scene.render_settings.enable_specular = bool(enable_specular)
+
+        mat.validate()
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def update_environment_params(
+        self,
+        enabled: Optional[bool] = None,
+        intensity: Optional[float] = None,
+        rotation_deg: Optional[float] = None,
+        diffuse_weight: Optional[float] = None,
+        specular_weight: Optional[float] = None
+    ) -> None:
+        """Updates environment lighting / IBL parameters."""
+        scene = self.current_scene
+        env = scene.environment
+        if enabled is not None:
+            env.enabled = bool(enabled)
+        if intensity is not None:
+            env.intensity = max(0.0, float(intensity))
+        if rotation_deg is not None:
+            env.rotation_deg = float(rotation_deg) % 360.0
+        if diffuse_weight is not None:
+            env.diffuse_weight = max(0.0, min(1.0, float(diffuse_weight)))
+        if specular_weight is not None:
+            env.specular_weight = max(0.0, min(1.0, float(specular_weight)))
+
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def update_receiver_params(
+        self,
+        receiver_type: str,
+        ground_y: Optional[float] = None,
+        cove_radius: Optional[float] = None,
+        wall_z: Optional[float] = None
+    ) -> None:
+        """Updates background receiver geometry (plane vs cyclorama)."""
+        scene = self.current_scene
+        scene.receiver.receiver_type = ReceiverType(receiver_type)
+        if ground_y is not None:
+            scene.receiver.ground_y = float(ground_y)
+        if cove_radius is not None:
+            scene.receiver.cove_radius = float(cove_radius)
+        if wall_z is not None:
+            scene.receiver.wall_z = float(wall_z)
+
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def undo(self) -> None:
+        """Reverts to previous scene snapshot."""
+        if self.state_manager.can_undo:
+            self.state_manager.undo()
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def redo(self) -> None:
+        """Re-applies next undone scene snapshot."""
+        if self.state_manager.can_redo:
+            self.state_manager.redo()
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    # -----------------------------------------------------------------------
+    # 3. RENDERING DISPATCH
+    # -----------------------------------------------------------------------
+
+    def request_render(self, quality: RenderQuality = RenderQuality.PREVIEW, async_mode: bool = True) -> Dict[str, Any]:
+        """Dispatches a render pass using the authoritative scene state."""
+        if not self.project or self.project.img_orig_srgb is None:
+            return {}
+
+        scene = self.current_scene
+        if async_mode:
+            self.orchestrator.submit_request(
+                scene=scene,
+                image_orig_srgb=self.project.img_orig_srgb,
+                depth_map=self.project.depth_map,
+                normals_map=self.project.normals_map,
+                fg_mask=self.project.fg_mask,
+                quality=quality,
+                protected_mask=self.project.protected_mask
+            )
+            return self.orchestrator.get_latest_result() or {}
+        else:
+            res = self.orchestrator.render_sync(
+                scene=scene,
+                image_orig_srgb=self.project.img_orig_srgb,
+                depth_map=self.project.depth_map,
+                normals_map=self.project.normals_map,
+                fg_mask=self.project.fg_mask,
+                quality=quality,
+                protected_mask=self.project.protected_mask
+            )
+            self.project.last_render_output = res
+            return res
+
+    # -----------------------------------------------------------------------
+    # 4. VIEWPORT DATA & 3D STAGE PROJECTION WITH INTERACTIVE GIZMO
+    # -----------------------------------------------------------------------
+
+    def get_scene_hierarchy(self) -> Dict[str, Any]:
+        """Returns structured hierarchy for Scene Tree view."""
+        scene = self.current_scene
+        return {
+            "selected_id": self.selected_object_id,
+            "scene": {
+                "name": "Studio Scene",
+                "version": scene.metadata.version,
+                "children": [
+                    {
+                        "id": "camera",
+                        "name": f"Camera ({scene.camera.width}x{scene.camera.height})",
+                        "type": "camera"
+                    },
+                    {
+                        "id": "subject",
+                        "name": f"Subject ({scene.subject.proxy_type.value})",
+                        "type": "subject",
+                        "material": scene.subject.material.to_dict()
+                    },
+                    {
+                        "id": "receiver",
+                        "name": f"Receiver ({scene.receiver.receiver_type.value})",
+                        "type": "receiver"
+                    },
+                    {
+                        "id": "environment",
+                        "name": "Studio Environment (IBL)",
+                        "type": "environment",
+                        "enabled": scene.environment.enabled
+                    },
+                    {
+                        "id": "lights_group",
+                        "name": f"Lights ({len(scene.lights)})",
+                        "type": "group",
+                        "children": [
+                            {
+                                "id": l.id,
+                                "name": l.name,
+                                "type": "light",
+                                "enabled": l.enabled,
+                                "cast_shadows": l.cast_shadows,
+                                "intensity": l.intensity,
+                                "temperature_kelvin": l.temperature_kelvin
+                            }
+                            for l in scene.lights
+                        ]
+                    }
+                ]
+            }
+        }
+
+    def get_inspector_data(self) -> Dict[str, Any]:
+        """Returns property dictionary for the currently selected object."""
+        scene = self.current_scene
+        sel_id = self.selected_object_id
+
+        # Check if light selected
+        light = scene.get_light(sel_id)
+        if light:
+            return {
+                "type": "light",
+                "id": light.id,
+                "name": light.name,
+                "position": light.position,
+                "rotation_deg": light.rotation_deg,
+                "width": light.width,
+                "height": light.height,
+                "intensity": light.intensity,
+                "temperature_kelvin": light.temperature_kelvin,
+                "energy_convention": light.energy_convention.value,
+                "enabled": light.enabled,
+                "cast_shadows": light.cast_shadows
+            }
+
+        if sel_id == "subject":
+            mat = scene.subject.material
+            return {
+                "type": "subject",
+                "proxy_type": scene.subject.proxy_type.value,
+                "dimensions": scene.subject.dimensions,
+                "roughness": mat.roughness,
+                "metallic": mat.metallic,
+                "specular_f0": mat.specular_f0,
+                "specular_intensity": mat.specular_intensity,
+                "enable_specular": scene.render_settings.enable_specular
+            }
+
+        if sel_id == "environment":
+            env = scene.environment
+            return {
+                "type": "environment",
+                "enabled": env.enabled,
+                "intensity": env.intensity,
+                "rotation_deg": env.rotation_deg,
+                "diffuse_weight": env.diffuse_weight,
+                "specular_weight": env.specular_weight
+            }
+
+        if sel_id == "receiver":
+            rec = scene.receiver
+            return {
+                "type": "receiver",
+                "receiver_type": rec.receiver_type.value,
+                "ground_y": rec.ground_y,
+                "cove_radius": rec.cove_radius,
+                "wall_z": rec.wall_z
+            }
+
+        # Camera
+        cam = scene.camera
+        return {
+            "type": "camera",
+            "pos": cam.pos,
+            "target": cam.target,
+            "fov_deg": cam.fov_deg,
+            "width": cam.width,
+            "height": cam.height
+        }
+
+    def render_3d_stage_canvas(
+        self,
+        width: int = 640,
+        height: int = 480,
+        draw_gizmo: bool = True
+    ) -> np.ndarray:
+        """
+        Renders the 3D Virtual Studio stage with orbit camera, metric grid,
+        cyclorama arc, subject proxy, area lights, and interactive 3D transform gizmo.
+        """
+        scene = self.current_scene
+        canvas = np.full((height, width, 3), 24, dtype=np.uint8)
+
+        # Orbit camera math
+        yaw = math.radians(self.stage_orbit_yaw_deg)
+        pitch = math.radians(self.stage_orbit_pitch_deg)
+        r = self.stage_orbit_dist
+
+        cam_x = r * math.cos(pitch) * math.sin(yaw)
+        cam_y = r * math.sin(pitch)
+        cam_z = r * math.cos(pitch) * math.cos(yaw)
+
+        cam_pos = np.array([cam_x, cam_y, cam_z], dtype=np.float32)
+        cam_tgt = np.array([self.stage_pan_offset[0], 0.35, self.stage_pan_offset[1]], dtype=np.float32)
+
+        fwd = cam_tgt - cam_pos
+        fwd /= np.linalg.norm(fwd)
+        up_tmp = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+        right = np.cross(fwd, up_tmp)
+        if np.linalg.norm(right) < 1e-4:
+            right = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        else:
+            right /= np.linalg.norm(right)
+        cam_up = np.cross(right, fwd)
+
+        fov = math.radians(45.0)
+        f_len = (height / 2.0) / math.tan(fov / 2.0)
+
+        def to_screen(pt3d: np.ndarray) -> Tuple[Tuple[int, int], bool]:
+            rel = pt3d - cam_pos
+            z_cam = np.dot(rel, fwd)
+            if z_cam <= 0.1:
+                return (0, 0), False
+            x_cam = np.dot(rel, right)
+            y_cam = np.dot(rel, cam_up)
+            sx = int(width / 2.0 + (x_cam / z_cam) * f_len)
+            sy = int(height / 2.0 - (y_cam / z_cam) * f_len)
+            return (sx, sy), (0 <= sx < width and 0 <= sy < height)
+
+        # 1. Metric Ground Grid (0.5m spacing)
+        grid_range = 2.5
+        step = 0.5
+        for x in np.arange(-grid_range, grid_range + 1e-4, step):
+            p1, v1 = to_screen(np.array([x, 0.0, -grid_range]))
+            p2, v2 = to_screen(np.array([x, 0.0, grid_range]))
+            if v1 or v2:
+                col = (60, 60, 65) if abs(x) < 1e-4 else (40, 40, 42)
+                cv2.line(canvas, p1, p2, col, 1, cv2.LINE_AA)
+
+        for z in np.arange(-grid_range, grid_range + 1e-4, step):
+            p1, v1 = to_screen(np.array([-grid_range, 0.0, z]))
+            p2, v2 = to_screen(np.array([grid_range, 0.0, z]))
+            if v1 or v2:
+                col = (60, 60, 65) if abs(z) < 1e-4 else (40, 40, 42)
+                cv2.line(canvas, p1, p2, col, 1, cv2.LINE_AA)
+
+        # 2. Cyclorama Wall/Cove
+        if scene.receiver.receiver_type == ReceiverType.CYCLORAMA:
+            rec = scene.receiver
+            cz = rec.cove_center_yz[1]
+            p_c1, v_c1 = to_screen(np.array([-grid_range, 0.0, cz]))
+            p_c2, v_c2 = to_screen(np.array([grid_range, 0.0, cz]))
+            if v_c1 or v_c2:
+                cv2.line(canvas, p_c1, p_c2, (80, 80, 110), 1, cv2.LINE_AA)
+            p_w1, v_w1 = to_screen(np.array([-grid_range, rec.cove_radius, rec.wall_z]))
+            p_w2, v_w2 = to_screen(np.array([grid_range, rec.cove_radius, rec.wall_z]))
+            if v_w1 or v_w2:
+                cv2.line(canvas, p_w1, p_w2, (100, 100, 140), 2, cv2.LINE_AA)
+
+        # 3. Subject Proxy Wireframe (Cyan)
+        backend = RenderBackend()
+        proxy = backend.instantiate_proxy_geometry(scene)
+        hx, hy, hz = (
+            proxy.half_extents if hasattr(proxy, 'half_extents')
+            else proxy.radii if hasattr(proxy, 'radii')
+            else (0.35, 0.35, 0.35)
+        )
+        local_box = np.array([
+            [-hx, -hy, -hz], [hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz],
+            [-hx, -hy,  hz], [hx, -hy,  hz], [hx, hy,  hz], [-hx, hy,  hz]
+        ], dtype=np.float32)
+        world_box = (local_box @ proxy.R_inv) + proxy.center
+        box_pts = [to_screen(pt)[0] for pt in world_box]
+        box_vis = [to_screen(pt)[1] for pt in world_box]
+        edges = [
+            (0, 1), (1, 2), (2, 3), (3, 0),
+            (4, 5), (5, 6), (6, 7), (7, 4),
+            (0, 4), (1, 5), (2, 6), (3, 7)
+        ]
+        for e1, e2 in edges:
+            if box_vis[e1] and box_vis[e2]:
+                cv2.line(canvas, box_pts[e1], box_pts[e2], (200, 220, 0), 2, cv2.LINE_AA)
+
+        # 4. Photograph Camera Frustum (Yellow)
+        c_pos = np.array(scene.camera.pos, dtype=np.float32)
+        c_tgt = np.array(scene.camera.target, dtype=np.float32)
+        p_cam, v_cam = to_screen(c_pos)
+        p_tgt, v_tgt = to_screen(c_tgt)
+        if v_cam:
+            cv2.circle(canvas, p_cam, 5, (0, 220, 255), -1, cv2.LINE_AA)
+            cv2.putText(canvas, "Camera", (p_cam[0] + 8, p_cam[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 220, 255), 1)
+        if v_cam and v_tgt:
+            cv2.line(canvas, p_cam, p_tgt, (0, 140, 180), 1, cv2.LINE_AA)
+
+        # 5. Area Lights & 3D Transform Gizmo
+        active_light = None
+        for light in scene.lights:
+            is_selected = (light.id == self.selected_object_id)
+            if is_selected:
+                active_light = light
+
+            l_pos = np.array(light.position, dtype=np.float32)
+            l_obj = RectangularAreaLight(
+                position=light.position,
+                rotation_euler=light.rotation_deg,
+                width=light.width,
+                height=light.height
+            )
+            hw = light.width / 2.0
+            hh = light.height / 2.0
+            corners_3d = [
+                l_pos + (-hw) * l_obj.u_tangent + (-hh) * l_obj.v_bitangent,
+                l_pos + ( hw) * l_obj.u_tangent + (-hh) * l_obj.v_bitangent,
+                l_pos + ( hw) * l_obj.u_tangent + ( hh) * l_obj.v_bitangent,
+                l_pos + (-hw) * l_obj.u_tangent + ( hh) * l_obj.v_bitangent
+            ]
+            c_screen = [to_screen(pt)[0] for pt in corners_3d]
+            c_vis = [to_screen(pt)[1] for pt in corners_3d]
+
+            if all(c_vis):
+                pts_poly = np.array(c_screen, dtype=np.int32).reshape((-1, 1, 2))
+                if not light.enabled:
+                    cv2.polylines(canvas, [pts_poly], True, (70, 70, 70), 1, cv2.LINE_AA)
+                elif is_selected:
+                    cv2.fillPoly(canvas, [pts_poly], (30, 160, 255))
+                    cv2.polylines(canvas, [pts_poly], True, (0, 230, 255), 2, cv2.LINE_AA)
+                else:
+                    cv2.fillPoly(canvas, [pts_poly], (35, 90, 180))
+                    cv2.polylines(canvas, [pts_poly], True, (50, 140, 230), 1, cv2.LINE_AA)
+
+                # Light normal vector arrow
+                if light.enabled:
+                    norm_tip = l_pos + l_obj.normal * 0.40
+                    p_tip, v_tip = to_screen(norm_tip)
+                    p_ctr, v_ctr = to_screen(l_pos)
+                    if v_tip and v_ctr:
+                        arrow_col = (0, 255, 255) if is_selected else (60, 150, 240)
+                        cv2.arrowedLine(canvas, p_ctr, p_tip, arrow_col, 2 if is_selected else 1, cv2.LINE_AA, tipLength=0.3)
+
+                p_label = c_screen[0]
+                tag = "[SEL] " if is_selected else ""
+                cv2.putText(canvas, f"{tag}{light.name}", (p_label[0], p_label[1] - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255) if is_selected else (180, 180, 180), 1)
+
+        # 6. Interactive 3D Transform Gizmo on Selected Light
+        if draw_gizmo and active_light is not None:
+            g_pos = np.array(active_light.position, dtype=np.float32)
+            p_ctr, v_ctr = to_screen(g_pos)
+            if v_ctr:
+                axis_len = 0.45
+                # X-axis (Red)
+                p_x, v_x = to_screen(g_pos + np.array([axis_len, 0.0, 0.0]))
+                if v_x:
+                    cv2.line(canvas, p_ctr, p_x, (0, 0, 240), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_x, 5, (0, 0, 255), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "X", (p_x[0] + 6, p_x[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 240), 1)
+
+                # Y-axis (Green)
+                p_y, v_y = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
+                if v_y:
+                    cv2.line(canvas, p_ctr, p_y, (0, 220, 0), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_y, 5, (0, 255, 0), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "Y", (p_y[0] + 6, p_y[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 0), 1)
+
+                # Z-axis (Blue)
+                p_z, v_z = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
+                if v_z:
+                    cv2.line(canvas, p_ctr, p_z, (240, 60, 0), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_z, 5, (255, 80, 0), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "Z", (p_z[0] + 6, p_z[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (240, 60, 0), 1)
+
+                # Center handle
+                cv2.circle(canvas, p_ctr, 5, (255, 255, 255), -1, cv2.LINE_AA)
+
+        # Studio Stage HUD overlay
+        cv2.putText(canvas, "3D VIRTUAL STUDIO STAGE", (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1)
+        cv2.putText(canvas, f"Orbit: Yaw {self.stage_orbit_yaw_deg:.0f} deg | Pitch {self.stage_orbit_pitch_deg:.0f} deg",
+                    (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (120, 120, 125), 1)
+
+        return canvas

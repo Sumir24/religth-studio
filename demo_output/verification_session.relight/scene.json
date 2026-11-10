@@ -1,0 +1,246 @@
+{
+  "metadata": {
+    "name": "Untitled Studio Scene",
+    "created_at": 1794333889.347015,
+    "version": "3.2.0",
+    "author": "Relight Artist"
+  },
+  "camera": {
+    "pos": [
+      0.0,
+      1.2,
+      2.5
+    ],
+    "target": [
+      0.0,
+      0.35,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "fov_deg": 45.0,
+    "width": 576,
+    "height": 1024,
+    "focal_length_mm": 50.0
+  },
+  "subject": {
+    "proxy_type": "OBB",
+    "position": [
+      0.0,
+      0.35,
+      0.0
+    ],
+    "rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "dimensions": [
+      0.35,
+      0.35,
+      0.35
+    ],
+    "sq_exponents": [
+      1.0,
+      1.0
+    ],
+    "mesh_path": null,
+    "visible": true,
+    "material": {
+      "id": "mat_fabric",
+      "name": "Woven Fabric",
+      "base_color": [
+        0.75,
+        0.75,
+        0.78
+      ],
+      "roughness": 0.85,
+      "metallic": 0.0,
+      "specular_f0": 0.03,
+      "specular_intensity": 0.5
+    }
+  },
+  "receiver": {
+    "receiver_type": "CYCLORAMA",
+    "ground_y": 0.0,
+    "cove_center_yz": [
+      0.4,
+      -0.8
+    ],
+    "cove_radius": 0.4,
+    "wall_z": -1.2,
+    "visible": true,
+    "material": {
+      "id": "mat_receiver",
+      "name": "Cyclorama Matte",
+      "base_color": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "roughness": 0.9,
+      "metallic": 0.0,
+      "specular_f0": 0.04,
+      "specular_intensity": 0.2
+    }
+  },
+  "lights": [
+    {
+      "id": "light_01",
+      "name": "Key Softbox",
+      "position": [
+        1.6,
+        2.2,
+        1.4
+      ],
+      "rotation_deg": [
+        -40.0,
+        45.0,
+        0.0
+      ],
+      "width": 0.8,
+      "height": 0.8,
+      "intensity": 1.8,
+      "color_rgb": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "temperature_kelvin": 4800.0,
+      "energy_convention": "FIXED_RADIANCE",
+      "enabled": true,
+      "cast_shadows": true
+    },
+    {
+      "id": "light_02",
+      "name": "Rim Strip",
+      "position": [
+        -1.5,
+        1.2,
+        0.8
+      ],
+      "rotation_deg": [
+        -20.0,
+        -50.0,
+        0.0
+      ],
+      "width": 0.3,
+      "height": 1.0,
+      "intensity": 0.8,
+      "color_rgb": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "temperature_kelvin": 6500.0,
+      "energy_convention": "FIXED_RADIANCE",
+      "enabled": true,
+      "cast_shadows": true
+    },
+    {
+      "id": "light_03",
+      "name": "Studio Light 03",
+      "position": [
+        0.0,
+        1.8,
+        1.6
+      ],
+      "rotation_deg": [
+        -30.0,
+        270.0,
+        0.0
+      ],
+      "width": 0.6,
+      "height": 0.6,
+      "intensity": 1.0,
+      "color_rgb": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "temperature_kelvin": 5500.0,
+      "energy_convention": "FIXED_RADIANCE",
+      "enabled": true,
+      "cast_shadows": true
+    },
+    {
+      "id": "light_03_copy_5126",
+      "name": "Studio Light 03 (Copy)",
+      "position": [
+        0.25,
+        1.8,
+        1.6
+      ],
+      "rotation_deg": [
+        -30.0,
+        270.0,
+        0.0
+      ],
+      "width": 0.6,
+      "height": 0.6,
+      "intensity": 1.0,
+      "color_rgb": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "temperature_kelvin": 5500.0,
+      "energy_convention": "FIXED_RADIANCE",
+      "enabled": true,
+      "cast_shadows": true
+    }
+  ],
+  "render_settings": {
+    "quality": "PREVIEW",
+    "preview_samples": 4,
+    "final_samples": 32,
+    "enable_cast_shadows": true,
+    "enable_contact_grounding": true,
+    "enable_hbao": true,
+    "ambient_fill": 0.15,
+    "exposure": 1.0,
+    "enable_specular": true,
+    "specular_only": false
+  },
+  "active_light_id": "light_01",
+  "materials": [
+    {
+      "id": "mat_default",
+      "name": "Default Studio Dielectric",
+      "base_color": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "roughness": 0.5,
+      "metallic": 0.0,
+      "specular_f0": 0.04,
+      "specular_intensity": 1.0
+    }
+  ],
+  "active_material_id": "mat_default",
+  "environment": {
+    "id": "env_default",
+    "name": "Default Studio Environment",
+    "enabled": false,
+    "asset_path": null,
+    "intensity": 1.0,
+    "rotation_deg": 0.0,
+    "diffuse_weight": 1.0,
+    "specular_weight": 1.0,
+    "is_hdr": true,
+    "tint_rgb": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  }
+}

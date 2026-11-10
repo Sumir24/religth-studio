@@ -159,7 +159,8 @@ class RenderBackend:
         depth_map: np.ndarray,
         normals_map: np.ndarray,
         fg_mask: np.ndarray,
-        quality: Optional[RenderQuality] = None
+        quality: Optional[RenderQuality] = None,
+        protected_mask: Optional[np.ndarray] = None
     ) -> Dict[str, Any]:
         """
         Executes complete scene-driven relighting pass.
@@ -479,6 +480,7 @@ class RenderBackend:
             direct_irradiance=total_illuminated_irradiance * scene.render_settings.exposure,
             direct_visibility=None,  # Illumination and contact occlusion are fully integrated into direct_irradiance
             ambient_fill=scene.render_settings.ambient_fill,
+            protected_mask=protected_mask,
             specular_radiance=total_specular_radiance * scene.render_settings.exposure if enable_spec else None,
             specular_only=getattr(scene.render_settings, "specular_only", False)
         )

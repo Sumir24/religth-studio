@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relight Studio — Virtual 3D Lighting Studio</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Top App Navigation / Toolbar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <span class="brand-title">RELIGHT STUDIO</span>
+        <span class="brand-badge">PRODUCT 1.0</span>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="header-actions">
+        <button id="btn-new-proj" class="btn-subtle" title="Create New Project">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          New
+        </button>
+        <button id="btn-import-photo" class="btn-subtle" title="Import Photograph Plate">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Import
+        </button>
+        <button id="btn-save-proj" class="btn-subtle" title="Save Project Bundle (.relight)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save
+        </button>
+        <button id="btn-export-img" class="btn-subtle" title="Export High-Res Relit Photograph">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+        </button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="history-actions">
+        <button id="btn-undo" class="btn-icon" title="Undo (Cmd+Z)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
+        </button>
+        <button id="btn-redo" class="btn-icon" title="Redo (Cmd+Shift+Z)">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="backend-selector">
+        <label for="select-backend" class="control-label">Compute:</label>
+        <select id="select-backend" class="select-input">
+          <option value="metal" selected>Metal GPU (Apple Silicon)</option>
+          <option value="cpu">CPU Reference Renderer</option>
+        </select>
+      </div>
+      <button id="btn-render-final" class="btn-accent" title="Render High-Sample Full HD Plate">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Render Final (32 MC)
+      </button>
+      <div id="status-pill" class="status-pill ready">
+        <span class="status-dot"></span>
+        <span id="status-text">Engine Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main 4-Region Workspace Layout -->
+  <main class="studio-workspace">
+    <!-- REGION C: Scene Hierarchy (Left Panel) -->
+    <aside class="panel hierarchy-panel">
+      <div class="panel-header">
+        <span class="panel-title">SCENE HIERARCHY</span>
+        <div class="panel-header-actions">
+          <button id="btn-add-light" class="btn-icon-small" title="Add Area Light">
+            <svg class="icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="hierarchy-tree" id="hierarchy-tree">
+        <!-- Injected via JavaScript -->
+      </div>
+      <div class="hierarchy-footer">
+        <button id="btn-dup-light" class="btn-subtle-compact" title="Duplicate Selected Light">Duplicate</button>
+        <button id="btn-del-light" class="btn-subtle-compact danger" title="Delete Selected Light">Delete</button>
+      </div>
+    </aside>
+
+    <!-- CENTER DUAL VIEWPORT REGION -->
+    <section class="center-viewports">
+      <!-- REGION A: Photograph Viewport -->
+      <div class="viewport-box photo-viewport-box">
+        <div class="viewport-header">
+          <div class="viewport-title-group">
+            <span class="viewport-title">1. PHOTOGRAPH VIEWPORT</span>
+            <span id="photo-dimensions" class="viewport-subtitle">1024 x 576</span>
+          </div>
+          <div class="viewport-controls">
+            <div class="mode-select-wrap">
+              <label for="select-display-mode" class="control-label">View:</label>
+              <select id="select-display-mode" class="select-input compact">
+                <option value="relit" selected>Relit Output</option>
+                <option value="split">Before / After Wipe</option>
+                <option value="specular">Specular Highlights Only</option>
+                <option value="proxy">Proxy Wireframe Overlay</option>
+                <option value="visibility">Direct Visibility Heatmap</option>
+                <option value="original">Original Photograph</option>
+              </select>
+            </div>
+            <div class="zoom-controls">
+              <button id="btn-zoom-fit" class="btn-icon-small" title="Fit to Screen">Fit</button>
+              <button id="btn-zoom-100" class="btn-icon-small" title="100% Zoom">1:1</button>
+              <span id="zoom-level-text" class="zoom-text">100%</span>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-container" id="photo-canvas-container">
+          <canvas id="photo-canvas"></canvas>
+          <div id="split-slider-line" class="split-slider-line" style="display: none;">
+            <div class="split-slider-handle"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- REGION B: 3D Studio Viewport -->
+      <div class="viewport-box stage-viewport-box">
+        <div class="viewport-header">
+          <div class="viewport-title-group">
+            <span class="viewport-title">2. 3D VIRTUAL STUDIO STAGE</span>
+            <span class="viewport-subtitle">Interactive Frustum, Proxies & Area Lights</span>
+          </div>
+          <div class="stage-hud-info">
+            <span id="orbit-info">Yaw: 35° | Pitch: 25°</span>
+            <button id="btn-reset-stage-cam" class="btn-icon-small" title="Reset Viewpoint">Reset</button>
+          </div>
+        </div>
+        <div class="canvas-container" id="stage-canvas-container">
+          <canvas id="stage-canvas"></canvas>
+          <div class="stage-instructions-overlay">
+            <span>Left-drag: Orbit | Shift-drag: Pan | Wheel: Zoom | Click Light: Select & Transform</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- REGION D: Context Inspector (Right Panel) -->
+    <aside class="panel inspector-panel">
+      <div class="panel-header">
+        <span class="panel-title">CONTEXT INSPECTOR</span>
+        <span id="inspector-target-type" class="badge">LIGHT</span>
+      </div>
+      <div class="inspector-scroll" id="inspector-content">
+        <!-- Injected dynamically based on selection -->
+      </div>
+      <div class="inspector-footer">
+        <div class="telemetry-box">
+          <div class="telemetry-row">
+            <span class="telemetry-label">Metal GPU Kernel:</span>
+            <span id="telemetry-gpu-ms" class="telemetry-val">2.41 ms</span>
+          </div>
+          <div class="telemetry-row">
+            <span class="telemetry-label">Host End-to-End:</span>
+            <span id="telemetry-wall-ms" class="telemetry-val">5.25 ms</span>
+          </div>
+          <div class="telemetry-row">
+            <span class="telemetry-label">Interactive Rate:</span>
+            <span id="telemetry-fps" class="telemetry-val">190.6 FPS</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Project Import / Creation Modal -->
+  <dialog id="modal-project" class="studio-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span id="modal-title">New Relight Project</span>
+        <button id="btn-modal-close" class="btn-icon-small">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Project Name:</label>
+          <input type="text" id="input-proj-name" class="text-input" value="Commercial Lighting Session">
+        </div>
+        <div class="form-group">
+          <label>Photograph Path:</label>
+          <div class="input-with-button">
+            <input type="text" id="input-photo-path" class="text-input" value="demo_output/nike_sample.jpg">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Quick Presets:</label>
+          <div class="preset-pill-group">
+            <button class="btn-preset" data-path="demo_output/nike_sample.jpg">Nike Sneaker (P1)</button>
+            <button class="btn-preset" data-path="benchmarks/reference_ibl/diagnostic_boards/synthetic_studio_env_preview.png">Studio Probe</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel" class="btn-subtle">Cancel</button>
+        <button id="btn-modal-confirm" class="btn-accent">Open Studio</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
