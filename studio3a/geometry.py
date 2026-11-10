@@ -238,7 +238,9 @@ class SuperquadricEllipsoid:
             
         p_hit_local = ro_v + t_root[:, None] * rd_v
         grad_local = self.eval_gradient(p_hit_local)
-        grad_norm = grad_local / np.clip(np.linalg.norm(grad_local, axis=-1, keepdims=True), 1e-6, None)
+        g_max = np.maximum(np.max(np.abs(grad_local), axis=-1, keepdims=True), 1e-12)
+        grad_scaled = grad_local / g_max
+        grad_norm = grad_scaled / np.maximum(np.linalg.norm(grad_scaled, axis=-1, keepdims=True), 1e-6)
         grad_world = grad_norm @ self.R_inv
         
         # Write back results

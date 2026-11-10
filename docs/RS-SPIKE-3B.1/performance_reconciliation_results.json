@@ -1,0 +1,418 @@
+[
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "OBB_plane",
+    "primitive_name": "OBB (Planar Receiver)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 0.895,
+      "median": 0.915,
+      "min": 0.7,
+      "max": 0.99
+    },
+    "host_e2e_time_ms": {
+      "mean": 7.491,
+      "median": 7.317,
+      "p95": 8.301,
+      "min": 6.918,
+      "max": 8.39
+    },
+    "host_overhead_ms": 6.596,
+    "gpu_time_percentage": 11.9,
+    "fps_gpu_limit": 1117.3,
+    "fps_host_e2e": 133.5
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "OBB_plane",
+    "primitive_name": "OBB (Planar Receiver)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 1.849,
+      "median": 1.785,
+      "min": 1.23,
+      "max": 2.92
+    },
+    "host_e2e_time_ms": {
+      "mean": 8.938,
+      "median": 8.916,
+      "p95": 9.828,
+      "min": 7.787,
+      "max": 9.865
+    },
+    "host_overhead_ms": 7.089,
+    "gpu_time_percentage": 20.7,
+    "fps_gpu_limit": 540.8,
+    "fps_host_e2e": 111.9
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "SQ_plane",
+    "primitive_name": "Superquadric (Planar Receiver)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 0.592,
+      "median": 0.655,
+      "min": 0.29,
+      "max": 0.86
+    },
+    "host_e2e_time_ms": {
+      "mean": 7.29,
+      "median": 7.392,
+      "p95": 7.895,
+      "min": 6.647,
+      "max": 7.982
+    },
+    "host_overhead_ms": 6.698,
+    "gpu_time_percentage": 8.1,
+    "fps_gpu_limit": 1689.2,
+    "fps_host_e2e": 137.2
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "SQ_plane",
+    "primitive_name": "Superquadric (Planar Receiver)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 1.559,
+      "median": 1.27,
+      "min": 0.92,
+      "max": 3.12
+    },
+    "host_e2e_time_ms": {
+      "mean": 8.531,
+      "median": 8.419,
+      "p95": 10.09,
+      "min": 7.214,
+      "max": 10.724
+    },
+    "host_overhead_ms": 6.972,
+    "gpu_time_percentage": 18.3,
+    "fps_gpu_limit": 641.4,
+    "fps_host_e2e": 117.2
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "SQ_cyclorama",
+    "primitive_name": "Superquadric (Cyclorama Cove)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 0.77,
+      "median": 0.84,
+      "min": 0.4,
+      "max": 1.02
+    },
+    "host_e2e_time_ms": {
+      "mean": 7.59,
+      "median": 7.761,
+      "p95": 8.315,
+      "min": 6.691,
+      "max": 8.428
+    },
+    "host_overhead_ms": 6.82,
+    "gpu_time_percentage": 10.1,
+    "fps_gpu_limit": 1298.7,
+    "fps_host_e2e": 131.8
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "SQ_cyclorama",
+    "primitive_name": "Superquadric (Cyclorama Cove)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 1.658,
+      "median": 1.54,
+      "min": 0.87,
+      "max": 4.03
+    },
+    "host_e2e_time_ms": {
+      "mean": 8.122,
+      "median": 7.853,
+      "p95": 9.651,
+      "min": 7.17,
+      "max": 10.349
+    },
+    "host_overhead_ms": 6.464,
+    "gpu_time_percentage": 20.4,
+    "fps_gpu_limit": 603.1,
+    "fps_host_e2e": 123.1
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "Mesh_280tri",
+    "primitive_name": "Triangle Mesh (280 Triangles)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 0.561,
+      "median": 0.685,
+      "min": 0.24,
+      "max": 0.97
+    },
+    "host_e2e_time_ms": {
+      "mean": 7.714,
+      "median": 8.006,
+      "p95": 8.378,
+      "min": 6.522,
+      "max": 8.506
+    },
+    "host_overhead_ms": 7.153,
+    "gpu_time_percentage": 7.3,
+    "fps_gpu_limit": 1782.5,
+    "fps_host_e2e": 129.6
+  },
+  {
+    "resolution": "1024x576",
+    "resolution_label": "1024x576 (Preview Viewport)",
+    "pixel_count": 589824,
+    "primitive_id": "Mesh_280tri",
+    "primitive_name": "Triangle Mesh (280 Triangles)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 1.448,
+      "median": 1.275,
+      "min": 1.1,
+      "max": 2.89
+    },
+    "host_e2e_time_ms": {
+      "mean": 8.675,
+      "median": 8.472,
+      "p95": 9.826,
+      "min": 7.951,
+      "max": 10.209
+    },
+    "host_overhead_ms": 7.227,
+    "gpu_time_percentage": 16.7,
+    "fps_gpu_limit": 690.6,
+    "fps_host_e2e": 115.3
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "OBB_plane",
+    "primitive_name": "OBB (Planar Receiver)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 2.311,
+      "median": 2.375,
+      "min": 1.68,
+      "max": 2.4
+    },
+    "host_e2e_time_ms": {
+      "mean": 27.336,
+      "median": 25.69,
+      "p95": 33.544,
+      "min": 23.866,
+      "max": 33.841
+    },
+    "host_overhead_ms": 25.025,
+    "gpu_time_percentage": 8.5,
+    "fps_gpu_limit": 432.7,
+    "fps_host_e2e": 36.6
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "OBB_plane",
+    "primitive_name": "OBB (Planar Receiver)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 4.672,
+      "median": 4.4,
+      "min": 2.2,
+      "max": 8.45
+    },
+    "host_e2e_time_ms": {
+      "mean": 27.796,
+      "median": 27.692,
+      "p95": 31.622,
+      "min": 24.46,
+      "max": 32.735
+    },
+    "host_overhead_ms": 23.124,
+    "gpu_time_percentage": 16.8,
+    "fps_gpu_limit": 214.0,
+    "fps_host_e2e": 36.0
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "SQ_plane",
+    "primitive_name": "Superquadric (Planar Receiver)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 2.468,
+      "median": 2.62,
+      "min": 1.08,
+      "max": 2.65
+    },
+    "host_e2e_time_ms": {
+      "mean": 27.117,
+      "median": 26.066,
+      "p95": 32.938,
+      "min": 23.765,
+      "max": 36.216
+    },
+    "host_overhead_ms": 24.649,
+    "gpu_time_percentage": 9.1,
+    "fps_gpu_limit": 405.2,
+    "fps_host_e2e": 36.9
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "SQ_plane",
+    "primitive_name": "Superquadric (Planar Receiver)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 5.947,
+      "median": 6.54,
+      "min": 2.48,
+      "max": 9.6
+    },
+    "host_e2e_time_ms": {
+      "mean": 31.604,
+      "median": 30.93,
+      "p95": 35.52,
+      "min": 27.493,
+      "max": 35.554
+    },
+    "host_overhead_ms": 25.657,
+    "gpu_time_percentage": 18.8,
+    "fps_gpu_limit": 168.2,
+    "fps_host_e2e": 31.6
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "SQ_cyclorama",
+    "primitive_name": "Superquadric (Cyclorama Cove)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 3.105,
+      "median": 3.2,
+      "min": 2.23,
+      "max": 3.21
+    },
+    "host_e2e_time_ms": {
+      "mean": 31.57,
+      "median": 30.999,
+      "p95": 35.873,
+      "min": 27.912,
+      "max": 35.93
+    },
+    "host_overhead_ms": 28.465,
+    "gpu_time_percentage": 9.8,
+    "fps_gpu_limit": 322.1,
+    "fps_host_e2e": 31.7
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "SQ_cyclorama",
+    "primitive_name": "Superquadric (Cyclorama Cove)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 7.003,
+      "median": 7.47,
+      "min": 4.39,
+      "max": 9.86
+    },
+    "host_e2e_time_ms": {
+      "mean": 32.382,
+      "median": 32.143,
+      "p95": 35.974,
+      "min": 27.398,
+      "max": 36.576
+    },
+    "host_overhead_ms": 25.379,
+    "gpu_time_percentage": 21.6,
+    "fps_gpu_limit": 142.8,
+    "fps_host_e2e": 30.9
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "Mesh_280tri",
+    "primitive_name": "Triangle Mesh (280 Triangles)",
+    "quality": "PREVIEW",
+    "quality_label": "PREVIEW (9 samples)",
+    "gpu_time_ms": {
+      "mean": 2.215,
+      "median": 2.34,
+      "min": 1.64,
+      "max": 2.37
+    },
+    "host_e2e_time_ms": {
+      "mean": 34.369,
+      "median": 32.682,
+      "p95": 42.641,
+      "min": 29.372,
+      "max": 43.775
+    },
+    "host_overhead_ms": 32.154,
+    "gpu_time_percentage": 6.4,
+    "fps_gpu_limit": 451.5,
+    "fps_host_e2e": 29.1
+  },
+  {
+    "resolution": "1920x1080",
+    "resolution_label": "1920x1080 (Full HD Production)",
+    "pixel_count": 2073600,
+    "primitive_id": "Mesh_280tri",
+    "primitive_name": "Triangle Mesh (280 Triangles)",
+    "quality": "FINAL",
+    "quality_label": "FINAL (64 samples)",
+    "gpu_time_ms": {
+      "mean": 6.751,
+      "median": 6.95,
+      "min": 3.05,
+      "max": 9.37
+    },
+    "host_e2e_time_ms": {
+      "mean": 33.973,
+      "median": 33.831,
+      "p95": 35.997,
+      "min": 32.596,
+      "max": 36.895
+    },
+    "host_overhead_ms": 27.222,
+    "gpu_time_percentage": 19.9,
+    "fps_gpu_limit": 148.1,
+    "fps_host_e2e": 29.4
+  }
+]
