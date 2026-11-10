@@ -1,5 +1,5 @@
 """
-RELIGHT STUDIO — RS-PRODUCT-1.1
+RELIGHT STUDIO — RS-PRODUCT-1.2
 ================================
 Project Management & Non-Destructive Bundle Specification
 Handles creation, serialization, deserialization, transactional atomic saving,
@@ -14,6 +14,7 @@ import time
 import shutil
 import tempfile
 import uuid
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 import numpy as np
@@ -35,7 +36,7 @@ class RelightProject:
     Ensures non-destructive source image handling, relative asset resolution,
     transactional atomic saving, and complete scene serialization.
     """
-    VERSION = "1.1.0"
+    VERSION = "1.2.0"
 
     def __init__(
         self,
@@ -57,6 +58,9 @@ class RelightProject:
         self.image_path: Optional[str] = image_path
         self.depth_path: Optional[str] = None
         self.normals_path: Optional[str] = None
+        self.image_sha256: Optional[str] = None
+        self.is_missing_assets: bool = False
+        self.missing_assets: List[str] = []
 
         # Pixel Buffers (float32 linear / sRGB)
         self.img_orig_srgb: Optional[np.ndarray] = None
@@ -70,6 +74,7 @@ class RelightProject:
 
         if self.image_path and os.path.exists(self.image_path):
             self.load_image_assets(self.image_path)
+
 
     def load_image_assets(
         self,
@@ -85,6 +90,9 @@ class RelightProject:
             raise FileNotFoundError(f"Source photograph not found: {image_path}")
 
         self.image_path = os.path.abspath(image_path)
+        with open(self.image_path, "rb") as f_in:
+            self.image_sha256 = hashlib.sha256(f_in.read()).hexdigest()
+
         im = Image.open(self.image_path).convert("RGB")
         W, H = im.size
 
@@ -141,6 +149,7 @@ class RelightProject:
             "created_at": self.created_at,
             "modified_at": self.modified_at,
             "image_path": img_ref,
+            "image_sha256": self.image_sha256,
             "depth_path": self.depth_path,
             "normals_path": self.normals_path,
             "scene": self.scene.to_dict()
@@ -172,6 +181,8 @@ class RelightProject:
                 target_img_path = source_dir / target_img_name
                 shutil.copy2(self.image_path, target_img_path)
                 rel_img_path = str(Path("source") / target_img_name)
+                with open(target_img_path, "rb") as f_img:
+                    self.image_sha256 = hashlib.sha256(f_img.read()).hexdigest()
 
             manifest = {
                 "version": self.VERSION,
@@ -180,7 +191,13 @@ class RelightProject:
                 "created_at": self.created_at,
                 "modified_at": time.time(),
                 "image_file": rel_img_path,
-                "scene_file": "scene.json"
+                "image_sha256": self.image_sha256,
+                "scene_file": "scene.json",
+                "camera_alignment": {
+                    "focal_length_mm": getattr(self.scene.camera, "focal_length_mm", 50.0),
+                    "fov_deg": self.scene.camera.fov_deg,
+                    "ground_y": self.scene.receiver.ground_y
+                }
             }
 
             with open(temp_dir / "project.json", "w") as f:
@@ -236,13 +253,16 @@ class RelightProject:
         img_abs = (bundle_dir / img_rel).resolve()
 
         # Resilient fallback if relative image not at expected path
+        missing_assets = []
+        is_missing = False
         if not img_abs.exists():
-            source_candidates = list((bundle_dir / "source").glob("*"))
+            source_candidates = [p for p in (bundle_dir / "source").glob("*") if p.is_file() and p.suffix.lower() in ('.png', '.jpg', '.jpeg')]
             if source_candidates:
                 img_abs = source_candidates[0].resolve()
             else:
-                # Fallback to placeholder
-                img_abs = bundle_dir / "source" / "fallback_image.png"
+                is_missing = True
+                missing_assets.append(img_rel)
+                img_abs = bundle_dir / "source" / "missing_asset_placeholder.png"
                 img_abs.parent.mkdir(parents=True, exist_ok=True)
                 placeholder = np.full((576, 1024, 3), 128, dtype=np.uint8)
                 Image.fromarray(placeholder).save(img_abs)
@@ -256,4 +276,7 @@ class RelightProject:
         proj.project_id = manifest.get("project_id", proj.project_id)
         proj.created_at = manifest.get("created_at", proj.created_at)
         proj.modified_at = manifest.get("modified_at", proj.modified_at)
+        proj.image_sha256 = manifest.get("image_sha256")
+        proj.is_missing_assets = is_missing
+        proj.missing_assets = missing_assets
         return proj

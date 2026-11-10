@@ -574,3 +574,126 @@ class CycloramaReceiver:
         
         best_norm = np.where(hit_any[..., None], best_norm, np.zeros_like(best_norm))
         return hit_any, best_t.astype(np.float32), best_norm.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# 5. PROXY GEOMETRY METRICS & GROUND-CONTACT ALIGNMENT HELPERS
+# ---------------------------------------------------------------------------
+
+def compute_proxy_geometry_meta(
+    proxy_type: str,
+    position: Tuple[float, float, float] | List[float] | np.ndarray,
+    dimensions: Tuple[float, float, float] | List[float] | np.ndarray,
+    rotation_euler: Tuple[float, float, float] | List[float] | np.ndarray,
+    scale: Tuple[float, float, float] | List[float] | np.ndarray = (1.0, 1.0, 1.0),
+    ground_y: float = 0.0
+) -> dict:
+    """
+    Computes exact 3D bounding geometry, lowest world elevation, ground contact point,
+    and gap distance for any subject proxy geometry.
+    """
+    pos = np.array(position, dtype=np.float32)
+    dims = np.array(dimensions, dtype=np.float32) * np.array(scale, dtype=np.float32)
+    R = euler_to_rotation_matrix(rotation_euler[0], rotation_euler[1], rotation_euler[2])
+
+    # 8 canonical bounding box vertices in local space
+    unit_box = np.array([
+        [-1.0, -1.0, -1.0],
+        [ 1.0, -1.0, -1.0],
+        [ 1.0,  1.0, -1.0],
+        [-1.0,  1.0, -1.0],
+        [-1.0, -1.0,  1.0],
+        [ 1.0, -1.0,  1.0],
+        [ 1.0,  1.0,  1.0],
+        [-1.0,  1.0,  1.0]
+    ], dtype=np.float32)
+
+    box_local = unit_box * dims
+    corners_world = pos + box_local @ R.T
+
+    edges = [
+        [0, 1], [1, 2], [2, 3], [3, 0],
+        [4, 5], [5, 6], [6, 7], [7, 4],
+        [0, 4], [1, 5], [2, 6], [3, 7]
+    ]
+
+    pt_type = str(proxy_type).upper()
+    if pt_type in ("SUPERQUADRIC", "SPHERE"):
+        # Analytical vertical half-extent for ellipsoid under rotation R:
+        # delta_y = sqrt((R_10 * rx)^2 + (R_11 * ry)^2 + (R_12 * rz)^2)
+        delta_y = math.sqrt((R[1, 0] * dims[0])**2 + (R[1, 1] * dims[1])**2 + (R[1, 2] * dims[2])**2)
+        lowest_y = float(pos[1] - delta_y)
+
+        # Contact point in local space has outward normal parallel to -Y_world
+        v_down = np.array([-R[1, 0], -R[1, 1], -R[1, 2]], dtype=np.float32)
+        w = dims * v_down
+        w_len = np.linalg.norm(w)
+        if w_len > 1e-6:
+            p_local = (dims * dims * v_down) / w_len
+            contact_pt_world = pos + R @ p_local
+            contact_pt_world[1] = lowest_y
+        else:
+            contact_pt_world = np.array([pos[0], lowest_y, pos[2]], dtype=np.float32)
+
+        # Generate sample points on ellipsoid surface for silhouette projection
+        u = np.linspace(0.0, 2.0 * np.pi, 16, endpoint=False, dtype=np.float32)
+        v = np.linspace(-np.pi / 2.0, np.pi / 2.0, 9, dtype=np.float32)
+        uu, vv = np.meshgrid(u, v)
+        xs = (dims[0] * np.cos(vv) * np.cos(uu)).flatten()
+        ys = (dims[1] * np.sin(vv)).flatten()
+        zs = (dims[2] * np.cos(vv) * np.sin(uu)).flatten()
+        surf_local = np.stack([xs, ys, zs], axis=-1)
+        silhouette_samples_world = pos + surf_local @ R.T
+
+    else:  # OBB or MESH
+        lowest_y = float(np.min(corners_world[:, 1]))
+        min_idx = int(np.argmin(corners_world[:, 1]))
+        contact_pt_world = corners_world[min_idx].copy()
+        silhouette_samples_world = corners_world
+
+    ground_gap_m = float(lowest_y - ground_y)
+    ground_marker_world = np.array([contact_pt_world[0], float(ground_y), contact_pt_world[2]], dtype=np.float32)
+
+    if abs(ground_gap_m) <= 0.005:
+        contact_state = "contact"
+    elif ground_gap_m > 0.005:
+        contact_state = "hovering"
+    else:
+        contact_state = "penetrating"
+
+    return {
+        "corners_world": corners_world.tolist(),
+        "edges": edges,
+        "silhouette_samples_world": silhouette_samples_world.tolist(),
+        "lowest_y": round(lowest_y, 4),
+        "ground_y": round(float(ground_y), 4),
+        "ground_gap_m": round(ground_gap_m, 4),
+        "contact_point_world": [round(float(v), 4) for v in contact_pt_world],
+        "ground_marker_world": [round(float(v), 4) for v in ground_marker_world],
+        "contact_state": contact_state
+    }
+
+
+def snap_proxy_to_ground(
+    position: Tuple[float, float, float] | List[float] | np.ndarray,
+    dimensions: Tuple[float, float, float] | List[float] | np.ndarray,
+    rotation_euler: Tuple[float, float, float] | List[float] | np.ndarray,
+    scale: Tuple[float, float, float] | List[float] | np.ndarray = (1.0, 1.0, 1.0),
+    ground_y: float = 0.0,
+    proxy_type: str = "OBB"
+) -> List[float]:
+    """
+    Computes new position vector [X, Y, Z] with Y adjusted so the lowest point of the proxy
+    rests exactly on the ground plane (lowest_y == ground_y).
+    """
+    meta = compute_proxy_geometry_meta(
+        proxy_type=proxy_type,
+        position=position,
+        dimensions=dimensions,
+        rotation_euler=rotation_euler,
+        scale=scale,
+        ground_y=ground_y
+    )
+    new_y = float(position[1]) - meta["ground_gap_m"]
+    return [round(float(position[0]), 4), round(new_y, 4), round(float(position[2]), 4)]
+

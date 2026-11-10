@@ -1,0 +1,48 @@
+{
+  "scenario_1_product_flat_ground": {
+    "silhouette_iou": 0.5676,
+    "foreground_coverage": 0.7991,
+    "ground_gap_m": -0.0,
+    "contact_state": "contact",
+    "luminance_centroid_before": [
+      295.30256490784956,
+      507.1530938357725
+    ],
+    "luminance_centroid_after": [
+      296.3689411619381,
+      508.255434039343
+    ],
+    "centroid_shift_px": 1.5337249556852752,
+    "mean_subject_luminance_delta": 0.004817209680095995,
+    "render_determinism_max_delta": 0.0,
+    "passed_determinism": true
+  },
+  "scenario_2_sculptural_object": {
+    "silhouette_iou": 0.5301,
+    "foreground_coverage": 0.5988,
+    "ground_gap_m": 0.0,
+    "contact_state": "contact",
+    "luminance_centroid_before": [
+      377.12025982934784,
+      247.89967867329378
+    ],
+    "luminance_centroid_after": [
+      377.1923083118816,
+      247.03840689204122
+    ],
+    "centroid_shift_px": 0.8642800848205214,
+    "mean_subject_luminance_delta": 0.012035414751838237,
+    "passed_determinism": true
+  },
+  "scenario_3_specular_transport": {
+    "material_roughness": 0.15,
+    "material_metallic": 0.7,
+    "max_delta_pixel_val": 244.0,
+    "peak_delta_location": [
+      233,
+      530
+    ],
+    "mean_luminance_delta": 10.766891479492188,
+    "passed_lighting_response": true
+  }
+}

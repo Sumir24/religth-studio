@@ -13,6 +13,19 @@ from typing import Tuple, List, Optional
 import numpy as np
 
 
+def fov_to_focal_length_mm(fov_deg: float, sensor_height_mm: float = 24.0) -> float:
+    """Computes 35mm full-frame equivalent focal length (in mm) from vertical FOV (in degrees)."""
+    rad = math.radians(max(1.0, min(170.0, fov_deg)))
+    return round(float((sensor_height_mm / 2.0) / math.tan(rad / 2.0)), 2)
+
+
+def focal_length_to_fov_deg(focal_length_mm: float, sensor_height_mm: float = 24.0) -> float:
+    """Computes vertical FOV (in degrees) from 35mm full-frame equivalent focal length (in mm)."""
+    fl = max(5.0, min(1200.0, float(focal_length_mm)))
+    rad = 2.0 * math.atan((sensor_height_mm / 2.0) / fl)
+    return round(float(math.degrees(rad)), 4)
+
+
 class Camera3D:
     """
     Vectorized 3D Pinhole Camera with explicit coordinate conventions:
@@ -56,11 +69,12 @@ class Camera3D:
         self.tan_half_fov = math.tan(self.fov_rad / 2.0)
         self.aspect = float(self.W) / float(self.H)
 
-        # Focal length in pixels
+        # Focal length in pixels and 35mm equivalent in mm
         self.fy = (self.H / 2.0) / self.tan_half_fov
         self.fx = self.fy  # Square pixels assumption
         self.cx = self.W / 2.0
         self.cy = self.H / 2.0
+        self.focal_length_mm = fov_to_focal_length_mm(self.fov_deg)
 
         # Construct Extrinsic View Matrix (World -> Camera)
         # R_view rows are camera axes: right, up_cam, -forward

@@ -809,3 +809,92 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--accent-gold);
   border-color: var(--accent-gold);
 }
+
+/* Lens & Camera Alignment Presets */
+.lens-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.btn-lens-preset {
+  background-color: var(--bg-input);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 5px 2px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.btn-lens-preset:hover {
+  background-color: var(--bg-input-hover);
+  color: var(--text-main);
+  border-color: var(--accent-blue);
+}
+
+.btn-lens-preset.active {
+  background-color: #1e293b;
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+/* Alignment Diagnostics Panel */
+.alignment-diag-box {
+  background-color: #111114;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.diag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diag-label {
+  color: var(--text-dim);
+}
+
+.diag-val {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.diag-val.good {
+  color: #4ade80;
+}
+
+.diag-val.warn {
+  color: #facc15;
+}
+
+.btn-action-primary {
+  background-color: #1e293b;
+  color: #38bdf8;
+  border: 1px solid #38bdf8;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  margin-top: 4px;
+}
+
+.btn-action-primary:hover {
+  background-color: #38bdf8;
+  color: #0f172a;
+}

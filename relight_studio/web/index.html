@@ -23,7 +23,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
         </svg>
         <span class="brand-title">RELIGHT STUDIO</span>
-        <span class="brand-badge">PRODUCT 1.0</span>
+        <span class="brand-badge">PRODUCT 1.2</span>
       </div>
       <div class="toolbar-divider"></div>
       <div class="header-actions">
@@ -110,11 +110,16 @@
               <select id="select-display-mode" class="select-input compact">
                 <option value="relit" selected>Relit Output</option>
                 <option value="split">Before / After Wipe</option>
-                <option value="specular">Specular Highlights Only</option>
-                <option value="proxy">Proxy Wireframe Overlay</option>
-                <option value="visibility">Direct Visibility Heatmap</option>
+                <option value="wireframe">Wireframe Overlay</option>
+                <option value="silhouette">Silhouette Blend</option>
+                <option value="guides">Guides (Horizon & Ground)</option>
+                <option value="mismatch">Mismatch (IoU Heatmap)</option>
                 <option value="original">Original Photograph</option>
               </select>
+            </div>
+            <div class="mode-select-wrap">
+              <label for="slider-overlay-opacity" class="control-label">Alpha:</label>
+              <input type="range" id="slider-overlay-opacity" min="0" max="1" step="0.05" value="0.6" style="width: 50px;">
             </div>
             <div class="zoom-controls">
               <button id="btn-zoom-fit" class="btn-icon-small" title="Fit to Screen">Fit</button>

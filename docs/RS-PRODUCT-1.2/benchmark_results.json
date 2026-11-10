@@ -1,0 +1,71 @@
+{
+  "alignment_metadata_latency_ms": {
+    "p50": 1.754,
+    "p95": 1.861,
+    "p99": 1.905,
+    "mean": 1.769
+  },
+  "geometry_interaction_latency_ms": {
+    "drag_p50": 1.079,
+    "drag_p95": 1.249,
+    "snap_ground_p50": 1.188,
+    "snap_ground_p95": 1.418
+  },
+  "overlay_composition": {
+    "wireframe": {
+      "p50_ms": 6.13,
+      "p95_ms": 6.5,
+      "fps": 163.3
+    },
+    "silhouette": {
+      "p50_ms": 5.71,
+      "p95_ms": 5.93,
+      "fps": 175.1
+    },
+    "guides": {
+      "p50_ms": 5.66,
+      "p95_ms": 5.95,
+      "fps": 176.7
+    },
+    "mismatch": {
+      "p50_ms": 21.36,
+      "p95_ms": 23.65,
+      "fps": 46.8
+    }
+  },
+  "preview_scaling": {
+    "1_lights": {
+      "p50_ms": 4.15,
+      "p95_ms": 9.27,
+      "p99_ms": 10.74,
+      "fps": 241.0,
+      "gpu_time_ms": 2.27
+    },
+    "4_lights": {
+      "p50_ms": 6.11,
+      "p95_ms": 8.27,
+      "p99_ms": 10.01,
+      "fps": 163.8,
+      "gpu_time_ms": 3.75
+    },
+    "8_lights": {
+      "p50_ms": 9.77,
+      "p95_ms": 12.49,
+      "p99_ms": 14.48,
+      "fps": 102.4,
+      "gpu_time_ms": 6.02
+    }
+  },
+  "final_1080p_render": {
+    "p50_ms": 5.0,
+    "p95_ms": 8.49,
+    "fps": 200.1
+  },
+  "memory_stability": {
+    "initial_rss_mb": 676.78,
+    "final_rss_mb": 789.69,
+    "delta_rss_mb": 112.91,
+    "cycles": 100,
+    "peak_rss_mb": 789.69
+  }
+}

@@ -81,6 +81,8 @@ class CameraData:
             raise ValueError(f"FOV out of valid range [1, 170]: {self.fov_deg}")
         if np.allclose(self.pos, self.target):
             raise ValueError("Camera position cannot coincide with camera target.")
+        from studio3a.camera import fov_to_focal_length_mm
+        self.focal_length_mm = fov_to_focal_length_mm(self.fov_deg)
 
 
 @dataclass

@@ -62,26 +62,34 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
                 "wall_time_ms": wall_ms,
                 "fps": fps
             },
+            "is_missing_assets": getattr(ctrl.project, "is_missing_assets", False) if ctrl.project else False,
+            "missing_assets": getattr(ctrl.project, "missing_assets", []) if ctrl.project else [],
             "photo_image_url": "/api/images/photo",
             "orig_image_url": "/api/images/orig",
             "stage_image_url": "/api/images/stage"
         }
 
     # -----------------------------------------------------------------------
-    # IMAGE BUFFER STREAMS
+    # IMAGE BUFFER STREAMS & ALIGNMENT OVERLAYS
     # -----------------------------------------------------------------------
 
     @app.get("/api/images/photo")
-    async def get_photo_image(mode: str = "relit"):
-        latest = ctrl.orchestrator.get_latest_result()
-        if latest and "relit_srgb" in latest:
-            arr = latest["relit_srgb"]
-        elif ctrl.project and ctrl.project.img_orig_srgb is not None:
-            arr = ctrl.project.img_orig_srgb
+    async def get_photo_image(mode: str = "relit", opacity: float = 0.6):
+        m = str(mode).lower().strip()
+        if m in ("wireframe", "silhouette", "guides", "mismatch"):
+            u8 = ctrl.render_photograph_with_overlay(mode=m, opacity=opacity)
+        elif m == "original":
+            u8 = ctrl.render_photograph_with_overlay(mode="original")
         else:
-            arr = np.zeros((384, 512, 3), dtype=np.float32)
+            latest = ctrl.orchestrator.get_latest_result()
+            if latest and "relit_srgb" in latest:
+                arr = latest["relit_srgb"]
+            elif ctrl.project and ctrl.project.img_orig_srgb is not None:
+                arr = ctrl.project.img_orig_srgb
+            else:
+                arr = np.zeros((384, 512, 3), dtype=np.float32)
+            u8 = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
 
-        u8 = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
         _, buf = cv2.imencode(".jpg", cv2.cvtColor(u8, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
         return Response(content=buf.tobytes(), media_type="image/jpeg")
 
@@ -105,6 +113,11 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
     @app.get("/api/stage/projection_meta")
     async def get_stage_projection_meta(width: int = Query(640), height: int = Query(480)):
         meta = ctrl.get_stage_projection_meta(width=width, height=height)
+        return meta
+
+    @app.get("/api/camera/alignment_meta")
+    async def get_camera_alignment_meta(width: Optional[int] = Query(None), height: Optional[int] = Query(None)):
+        meta = ctrl.get_alignment_projection_meta(canvas_w=width, canvas_h=height)
         return meta
 
     @app.post("/api/stage/drag")
@@ -230,9 +243,17 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
         ctrl.update_subject_proxy_params(
             proxy_type=payload.get("proxy_type"),
             dimensions=payload.get("dimensions"),
-            position_y=payload.get("position_y")
+            position=payload.get("position"),
+            position_y=payload.get("position_y"),
+            rotation_deg=payload.get("rotation_deg"),
+            scale=payload.get("scale")
         )
         return {"status": "ok"}
+
+    @app.post("/api/subject/snap_ground")
+    async def snap_subject_ground():
+        new_y = ctrl.snap_subject_to_ground()
+        return {"status": "ok", "position_y": new_y}
 
     @app.post("/api/material/profile")
     async def set_material_profile(payload: Dict[str, Any] = Body(...)):
@@ -267,16 +288,43 @@ def create_app(controller: Optional[StudioAppController] = None) -> FastAPI:
         ctrl.update_receiver_params(
             receiver_type=payload.get("receiver_type", "CYCLORAMA"),
             ground_y=payload.get("ground_y"),
-            cove_radius=payload.get("cove_radius")
+            cove_radius=payload.get("cove_radius"),
+            wall_z=payload.get("wall_z")
         )
         return {"status": "ok"}
 
     @app.post("/api/camera/params")
     async def update_camera_params(payload: Dict[str, Any] = Body(...)):
-        if "fov_deg" in payload:
-            ctrl.current_scene.camera.fov_deg = float(payload["fov_deg"])
-            ctrl.state_manager.push_state(ctrl.current_scene)
-            ctrl.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+        ctrl.update_camera_params(
+            pos=payload.get("pos"),
+            target=payload.get("target"),
+            fov_deg=payload.get("fov_deg"),
+            focal_length_mm=payload.get("focal_length_mm"),
+            elevation=payload.get("elevation"),
+            distance=payload.get("distance"),
+            pitch_deg=payload.get("pitch_deg"),
+            yaw_deg=payload.get("yaw_deg")
+        )
+        return {"status": "ok"}
+
+    @app.post("/api/camera/preset")
+    async def apply_camera_preset(payload: Dict[str, Any] = Body(...)):
+        preset = payload.get("preset", "50mm")
+        fl = ctrl.apply_camera_preset(preset)
+        return {
+            "status": "ok",
+            "focal_length_mm": fl,
+            "fov_deg": ctrl.current_scene.camera.fov_deg
+        }
+
+    @app.post("/api/camera/fit")
+    async def fit_camera_subject():
+        dist = ctrl.fit_camera_to_subject()
+        return {"status": "ok", "distance": dist}
+
+    @app.post("/api/camera/reset")
+    async def reset_camera():
+        ctrl.reset_camera_photo()
         return {"status": "ok"}
 
     @app.post("/api/stage/orbit")

@@ -9,6 +9,7 @@
 const state = {
   selectedId: "light_01",
   displayMode: "relit",
+  overlayOpacity: 0.6,
   splitRatio: 0.5,
   isDraggingSplit: false,
   
@@ -27,6 +28,7 @@ const state = {
   
   // Interactive 3D Gizmo & Picking
   projectionMeta: null,
+  alignmentMeta: null,
   activeGizmoAxis: null,
   hoverGizmoAxis: null,
   hoverTarget: null,
@@ -73,6 +75,17 @@ const modalProject = document.getElementById("modal-project");
 // --------------------------------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
   setupEventHandlers();
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has("view")) {
+    state.displayMode = urlParams.get("view");
+    const sel = document.getElementById("select-display-mode");
+    if (sel) sel.value = state.displayMode;
+  }
+  if (urlParams.has("alpha")) {
+    state.overlayOpacity = parseFloat(urlParams.get("alpha"));
+    const slider = document.getElementById("slider-overlay-opacity");
+    if (slider) slider.value = state.overlayOpacity;
+  }
   resizeCanvases();
   window.addEventListener("resize", resizeCanvases);
   refreshAll();
@@ -105,17 +118,12 @@ async function refreshAll() {
     renderHierarchy(data.hierarchy);
     renderInspector(data.inspector);
     
-    // Fetch 3D Projection Meta for Gizmos & Hit-Testing
+    // Fetch 3D Stage & Photograph Viewport Alignment Meta
     fetchProjectionMeta();
+    fetchAlignmentMeta();
 
-    // Update Photograph image
-    if (data.photo_image_url) {
-      state.photoImg.onload = () => {
-        photoDimensions.textContent = `${state.photoImg.naturalWidth} x ${state.photoImg.naturalHeight}`;
-        renderPhotoViewport();
-      };
-      state.photoImg.src = data.photo_image_url + "?t=" + Date.now();
-    }
+    // Update Photograph image stream with current display mode & opacity
+    refreshPhotoStream();
     
     if (data.orig_image_url) {
       state.origImg.src = data.orig_image_url + "?t=" + Date.now();
@@ -127,11 +135,23 @@ async function refreshAll() {
       state.stageImg.src = data.stage_image_url + "?t=" + Date.now();
     }
     
-    setStatus("ready", "Engine Ready");
+    if (data.is_missing_assets && data.missing_assets && data.missing_assets.length > 0) {
+      setStatus("error", `MISSING ASSETS: ${data.missing_assets.join(', ')}`);
+    } else {
+      setStatus("ready", "Engine Ready");
+    }
   } catch (err) {
     console.error("Refresh failed:", err);
     setStatus("ready", "Ready");
   }
+}
+
+function refreshPhotoStream() {
+  state.photoImg.onload = () => {
+    photoDimensions.textContent = `${state.photoImg.naturalWidth} x ${state.photoImg.naturalHeight}`;
+    renderPhotoViewport();
+  };
+  state.photoImg.src = `/api/images/photo?mode=${encodeURIComponent(state.displayMode)}&opacity=${state.overlayOpacity}&t=${Date.now()}`;
 }
 
 async function fetchProjectionMeta() {
@@ -140,6 +160,15 @@ async function fetchProjectionMeta() {
     state.projectionMeta = await res.json();
   } catch (err) {
     console.error("Failed to fetch projection meta:", err);
+  }
+}
+
+async function fetchAlignmentMeta() {
+  try {
+    const res = await fetch("/api/camera/alignment_meta");
+    state.alignmentMeta = await res.json();
+  } catch (err) {
+    console.error("Failed to fetch alignment meta:", err);
   }
 }
 
@@ -311,6 +340,22 @@ function renderStageViewport() {
         stageCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
         stageCtx.stroke();
         stageCtx.fill();
+      } else if (ax === "ROLL" && g.rot_roll) {
+        const p = toCanvasCoords(g.rot_roll[0], g.rot_roll[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#ec4899";
+        stageCtx.fillStyle = "#ec4899";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+        stageCtx.stroke();
+        stageCtx.fill();
+      } else if (ax === "SCALE" && g.scale_uniform) {
+        const p = toCanvasCoords(g.scale_uniform[0], g.scale_uniform[1], dx, dy, scale);
+        stageCtx.strokeStyle = "#ffffff";
+        stageCtx.fillStyle = "#ffffff";
+        stageCtx.beginPath();
+        stageCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+        stageCtx.stroke();
+        stageCtx.fill();
       }
       stageCtx.restore();
     }
@@ -356,7 +401,7 @@ function hitTestStage(cx, cy) {
 
   const meta = state.projectionMeta;
 
-  // 1. Gizmo handles for selected light
+  // 1. Gizmo handles for selected light or subject
   if (meta.gizmo) {
     const g = meta.gizmo;
     const tol = 16.0;
@@ -368,6 +413,14 @@ function hitTestStage(cx, cy) {
     // Yaw ring handle
     if (g.rot_yaw && Math.hypot(ix - g.rot_yaw[0], iy - g.rot_yaw[1]) < tol) {
       return { type: "gizmo", axis: "YAW" };
+    }
+    // Roll ring handle
+    if (g.rot_roll && Math.hypot(ix - g.rot_roll[0], iy - g.rot_roll[1]) < tol) {
+      return { type: "gizmo", axis: "ROLL" };
+    }
+    // Scale uniform handle
+    if (g.scale_uniform && Math.hypot(ix - g.scale_uniform[0], iy - g.scale_uniform[1]) < tol) {
+      return { type: "gizmo", axis: "SCALE" };
     }
     // Axis X
     if (g.axis_x && distToSegment(ix, iy, g.center[0], g.center[1], g.axis_x[0], g.axis_x[1]) < tol * 0.8) {
@@ -594,26 +647,88 @@ function renderLightInspector(light) {
 }
 
 function renderMaterialInspector(subj) {
-  // 1. Subject Approximate 3D Geometry
-  const secProxy = createSection("Approximate 3D Geometry");
-  secProxy.appendChild(createSelectRow("Proxy Type", ["SPHERE", "CYLINDER", "BOX"], subj.proxy_type || "SPHERE", (v) => {
+  // 1. Subject Approximate 3D Geometry & Alignment
+  const secProxy = createSection("Proxy Geometry & 3D Alignment");
+  secProxy.appendChild(createSelectRow("Proxy Type", ["OBB", "SUPERQUADRIC", "SPHERE"], subj.proxy_type || "OBB", (v) => {
     dispatchMutation("/api/subject/params", { proxy_type: v });
   }));
-  const dims = subj.dimensions || [0.4, 0.4, 0.4];
-  secProxy.appendChild(createSliderRow("Dim X / Radius (m)", 0.05, 2.0, 0.05, dims[0], (v) => {
+
+  // Snap to Floor button
+  const snapBtn = document.createElement("button");
+  snapBtn.className = "btn-action-primary";
+  snapBtn.textContent = "Snap Proxy to Floor";
+  snapBtn.addEventListener("click", async () => {
+    await fetch("/api/subject/snap_ground", { method: "POST" });
+    refreshAll();
+  });
+  secProxy.appendChild(snapBtn);
+
+  // Ground Contact Status
+  const gapM = subj.ground_gap_m !== undefined ? subj.ground_gap_m : 0.0;
+  const cState = subj.contact_state || "contact";
+  const contactRow = document.createElement("div");
+  contactRow.className = "inspector-row two-col";
+  contactRow.innerHTML = `<span class="inspector-label">Ground Gap:</span><span class="diag-val ${cState === 'contact' ? 'good' : 'warn'}">${gapM.toFixed(3)}m (${cState.toUpperCase()})</span>`;
+  secProxy.appendChild(contactRow);
+
+  // Alignment Diagnostics Box
+  if (state.alignmentMeta && state.alignmentMeta.diagnostics) {
+    const d = state.alignmentMeta.diagnostics;
+    const diagBox = document.createElement("div");
+    diagBox.className = "alignment-diag-box";
+    const iouPct = (d.silhouette_iou * 100).toFixed(1);
+    const covPct = (d.foreground_coverage * 100).toFixed(1);
+    diagBox.innerHTML = `
+      <div class="diag-row"><span class="diag-label">Silhouette IoU:</span><span class="diag-val ${d.silhouette_iou > 0.5 ? 'good' : 'warn'}">${iouPct}%</span></div>
+      <div class="diag-row"><span class="diag-label">FG Coverage:</span><span class="diag-val ${d.foreground_coverage > 0.6 ? 'good' : 'warn'}">${covPct}%</span></div>
+      <div class="diag-row"><span class="diag-label">BBox Delta:</span><span class="diag-val">[${(d.bbox_delta_px || []).join(', ')}] px</span></div>
+    `;
+    secProxy.appendChild(diagBox);
+  }
+
+  // 3D Position
+  const pos = subj.position || [0.0, subj.position_y || 0.35, 0.0];
+  secProxy.appendChild(createSliderRow("Pos X (m)", -3.0, 3.0, 0.05, pos[0], (v) => {
+    pos[0] = v;
+    dispatchMutation("/api/subject/params", { position: pos });
+  }));
+  secProxy.appendChild(createSliderRow("Pos Y (m)", -1.0, 3.0, 0.05, pos[1], (v) => {
+    pos[1] = v;
+    dispatchMutation("/api/subject/params", { position: pos, position_y: v });
+  }));
+  secProxy.appendChild(createSliderRow("Pos Z (m)", -3.0, 3.0, 0.05, pos[2], (v) => {
+    pos[2] = v;
+    dispatchMutation("/api/subject/params", { position: pos });
+  }));
+
+  // 3D Rotation (Pitch, Yaw, Roll)
+  const rot = subj.rotation_deg || [0.0, 0.0, 0.0];
+  secProxy.appendChild(createSliderRow("Pitch (°)", -180.0, 180.0, 5.0, rot[0], (v) => {
+    rot[0] = v;
+    dispatchMutation("/api/subject/params", { rotation_deg: rot });
+  }));
+  secProxy.appendChild(createSliderRow("Yaw (°)", -180.0, 180.0, 5.0, rot[1], (v) => {
+    rot[1] = v;
+    dispatchMutation("/api/subject/params", { rotation_deg: rot });
+  }));
+  secProxy.appendChild(createSliderRow("Roll (°)", -180.0, 180.0, 5.0, rot[2], (v) => {
+    rot[2] = v;
+    dispatchMutation("/api/subject/params", { rotation_deg: rot });
+  }));
+
+  // Dimensions
+  const dims = subj.dimensions || [0.35, 0.35, 0.35];
+  secProxy.appendChild(createSliderRow("Width (m)", 0.05, 3.0, 0.05, dims[0], (v) => {
     dims[0] = v;
     dispatchMutation("/api/subject/params", { dimensions: dims });
   }));
-  secProxy.appendChild(createSliderRow("Dim Y / Height (m)", 0.05, 2.0, 0.05, dims[1], (v) => {
+  secProxy.appendChild(createSliderRow("Height (m)", 0.05, 3.0, 0.05, dims[1], (v) => {
     dims[1] = v;
     dispatchMutation("/api/subject/params", { dimensions: dims });
   }));
-  secProxy.appendChild(createSliderRow("Dim Z / Depth (m)", 0.05, 2.0, 0.05, dims[2], (v) => {
+  secProxy.appendChild(createSliderRow("Depth (m)", 0.05, 3.0, 0.05, dims[2], (v) => {
     dims[2] = v;
     dispatchMutation("/api/subject/params", { dimensions: dims });
-  }));
-  secProxy.appendChild(createSliderRow("Elevation Y (m)", -1.0, 1.0, 0.05, subj.position_y !== undefined ? subj.position_y : 0.0, (v) => {
-    dispatchMutation("/api/subject/params", { position_y: v });
   }));
   inspectorContent.appendChild(secProxy);
 
@@ -669,21 +784,91 @@ function renderReceiverInspector(rec) {
   secRec.appendChild(createSelectRow("Type", ["CYCLORAMA", "PLANE"], rec.receiver_type, (v) => {
     dispatchMutation("/api/receiver/params", { receiver_type: v });
   }));
-  secRec.appendChild(createSliderRow("Ground Y", -1.0, 1.0, 0.05, rec.ground_y, (v) => {
+  secRec.appendChild(createSliderRow("Ground Y (m)", -1.0, 1.0, 0.05, rec.ground_y, (v) => {
     dispatchMutation("/api/receiver/params", { receiver_type: rec.receiver_type, ground_y: v });
   }));
-  secRec.appendChild(createSliderRow("Cove Radius", 0.1, 1.5, 0.05, rec.cove_radius, (v) => {
+  secRec.appendChild(createSliderRow("Cove Radius (m)", 0.05, 2.0, 0.05, rec.cove_radius, (v) => {
     dispatchMutation("/api/receiver/params", { receiver_type: rec.receiver_type, cove_radius: v });
+  }));
+  secRec.appendChild(createSliderRow("Wall Z (m)", -4.0, 0.0, 0.1, rec.wall_z !== undefined ? rec.wall_z : -1.2, (v) => {
+    dispatchMutation("/api/receiver/params", { receiver_type: rec.receiver_type, wall_z: v });
   }));
   inspectorContent.appendChild(secRec);
 }
 
 function renderCameraInspector(cam) {
-  const secCam = createSection("Photograph Camera");
-  secCam.appendChild(createSliderRow("FOV (°)", 20.0, 90.0, 1.0, cam.fov_deg, (v) => {
+  // 1. Lens Focal Length Presets
+  const secPreset = createSection("35mm Equivalent Lens Presets");
+  const grid = document.createElement("div");
+  grid.className = "lens-preset-grid";
+  const presets = [
+    { label: "24mm", id: "24mm" },
+    { label: "35mm", id: "35mm" },
+    { label: "50mm", id: "50mm" },
+    { label: "85mm", id: "85mm" },
+    { label: "105mm", id: "105mm" }
+  ];
+  presets.forEach(p => {
+    const btn = document.createElement("button");
+    const isActive = Math.abs((cam.focal_length_mm || 50.0) - parseFloat(p.id)) < 2.0;
+    btn.className = `btn-lens-preset ${isActive ? 'active' : ''}`;
+    btn.textContent = p.label;
+    btn.addEventListener("click", async () => {
+      await fetch("/api/camera/preset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: p.id })
+      });
+      refreshAll();
+    });
+    grid.appendChild(btn);
+  });
+  secPreset.appendChild(grid);
+  inspectorContent.appendChild(secPreset);
+
+  // 2. Optical Parameters
+  const secOptics = createSection("Optical Matching");
+  const curFl = cam.focal_length_mm || 50.0;
+  secOptics.appendChild(createSliderRow("Focal (mm)", 18.0, 200.0, 1.0, curFl, (v) => {
+    dispatchMutation("/api/camera/params", { focal_length_mm: v });
+  }));
+  secOptics.appendChild(createSliderRow("FOV (°)", 10.0, 90.0, 1.0, cam.fov_deg, (v) => {
     dispatchMutation("/api/camera/params", { fov_deg: v });
   }));
-  inspectorContent.appendChild(secCam);
+  inspectorContent.appendChild(secOptics);
+
+  // 3. Perspective & Framing
+  const secPose = createSection("Perspective & Framing");
+  const curDist = cam.distance || 3.0;
+  secPose.appendChild(createSliderRow("Distance (m)", 0.5, 10.0, 0.1, curDist, (v) => {
+    dispatchMutation("/api/camera/params", { distance: v });
+  }));
+  const curElev = cam.elevation || (cam.pos ? cam.pos[1] : 1.2);
+  secPose.appendChild(createSliderRow("Elevation (m)", -2.0, 4.0, 0.1, curElev, (v) => {
+    dispatchMutation("/api/camera/params", { elevation: v });
+  }));
+
+  // Framing buttons
+  const fitBtn = document.createElement("button");
+  fitBtn.className = "btn-action-primary";
+  fitBtn.textContent = "Fit Frame to Subject";
+  fitBtn.addEventListener("click", async () => {
+    await fetch("/api/camera/fit", { method: "POST" });
+    refreshAll();
+  });
+  secPose.appendChild(fitBtn);
+
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "btn-subtle";
+  resetBtn.style.marginTop = "6px";
+  resetBtn.textContent = "Reset to 50mm Normal";
+  resetBtn.addEventListener("click", async () => {
+    await fetch("/api/camera/reset", { method: "POST" });
+    refreshAll();
+  });
+  secPose.appendChild(resetBtn);
+
+  inspectorContent.appendChild(secPose);
 }
 
 // --------------------------------------------------------------------------
@@ -894,8 +1079,16 @@ function setupEventHandlers() {
   
   document.getElementById("select-display-mode").addEventListener("change", (e) => {
     state.displayMode = e.target.value;
-    renderPhotoViewport();
+    refreshPhotoStream();
   });
+
+  const sliderOpacity = document.getElementById("slider-overlay-opacity");
+  if (sliderOpacity) {
+    sliderOpacity.addEventListener("input", (e) => {
+      state.overlayOpacity = parseFloat(e.target.value);
+      refreshPhotoStream();
+    });
+  }
   
   // 3D Stage Viewport: Hit-Testing, Gizmo Dragging, Orbit & Pan
   stageCanvas.addEventListener("mousedown", (e) => {
@@ -958,7 +1151,7 @@ function setupEventHandlers() {
       }).then(() => {
         // Fast-path reload stage and relit buffers
         state.stageImg.src = "/api/images/stage?t=" + Date.now();
-        state.photoImg.src = "/api/images/photo?t=" + Date.now();
+        refreshPhotoStream();
       });
       return;
     }

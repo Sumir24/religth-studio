@@ -26,6 +26,8 @@ from studio3a.material import MaterialData
 from studio3a.lighting import RectangularAreaLight
 from studio3a.environment import EnvironmentData
 from studio3a.renderer import RenderBackend
+from studio3a.camera import Camera3D, fov_to_focal_length_mm, focal_length_to_fov_deg
+from studio3a.geometry import compute_proxy_geometry_meta, snap_proxy_to_ground
 
 from relight_studio.project import RelightProject
 from relight_studio.orchestrator import RenderingOrchestrator
@@ -416,11 +418,19 @@ class StudioAppController:
 
         return cam_pos, to_screen, right, cam_up, fwd, f_len
 
-    def get_stage_projection_meta(self, width: int = 640, height: int = 480) -> Dict[str, Any]:
+    def get_stage_projection_meta(
+        self,
+        width: int = 640,
+        height: int = 480,
+        canvas_w: Optional[int] = None,
+        canvas_h: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Returns full screen coordinates for 3D picking, gizmo handles, and object hit-testing.
         """
-        cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(width, height)
+        w = canvas_w if canvas_w is not None else width
+        h = canvas_h if canvas_h is not None else height
+        cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(w, h)
         scene = self.current_scene
 
         meta = {
@@ -462,7 +472,7 @@ class StudioAppController:
             if l.id == self.selected_object_id:
                 active_light = l
 
-        # Project 3D Gizmo for active light
+        # Project 3D Gizmo for active light or selected subject
         if active_light:
             g_pos = np.array(active_light.position, dtype=np.float32)
             p_ctr, v_ctr = to_screen(g_pos)
@@ -472,19 +482,64 @@ class StudioAppController:
                 p_y, _ = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
                 p_z, _ = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
                 
-                # Pitch ring handle
+                # Pitch ring handle (in YZ plane)
                 p_pitch, _ = to_screen(g_pos + np.array([0.0, axis_len * 0.7, axis_len * 0.7]))
-                # Yaw ring handle
+                # Yaw ring handle (in XZ plane)
                 p_yaw, _ = to_screen(g_pos + np.array([axis_len * 0.7, 0.0, axis_len * 0.7]))
+                # Roll ring handle (in XY plane)
+                p_roll, _ = to_screen(g_pos + np.array([axis_len * 0.7, axis_len * 0.7, 0.0]))
 
                 meta["gizmo"] = {
+                    "target_id": active_light.id,
                     "light_id": active_light.id,
                     "center": list(p_ctr),
                     "axis_x": list(p_x),
                     "axis_y": list(p_y),
                     "axis_z": list(p_z),
                     "rot_pitch": list(p_pitch),
-                    "rot_yaw": list(p_yaw)
+                    "rot_yaw": list(p_yaw),
+                    "rot_roll": list(p_roll)
+                }
+
+        elif self.selected_object_id == "subject":
+            g_pos = np.array(scene.subject.position, dtype=np.float32)
+            p_ctr, v_ctr = to_screen(g_pos)
+            if v_ctr:
+                axis_len = 0.50
+                p_x, _ = to_screen(g_pos + np.array([axis_len, 0.0, 0.0]))
+                p_y, _ = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
+                p_z, _ = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
+                
+                # Pitch, Yaw, Roll handles
+                p_pitch, _ = to_screen(g_pos + np.array([0.0, axis_len * 0.7, axis_len * 0.7]))
+                p_yaw, _ = to_screen(g_pos + np.array([axis_len * 0.7, 0.0, axis_len * 0.7]))
+                p_roll, _ = to_screen(g_pos + np.array([axis_len * 0.7, axis_len * 0.7, 0.0]))
+                p_scale, _ = to_screen(g_pos + np.array([axis_len * 0.5, axis_len * 0.5, axis_len * 0.5]))
+
+                pmeta = compute_proxy_geometry_meta(
+                    proxy_type=scene.subject.proxy_type.value,
+                    position=scene.subject.position,
+                    dimensions=scene.subject.dimensions,
+                    rotation_euler=scene.subject.rotation_deg,
+                    scale=scene.subject.scale,
+                    ground_y=scene.receiver.ground_y
+                )
+                p_gnd, _ = to_screen(np.array(pmeta["ground_marker_world"], dtype=np.float32))
+
+                meta["gizmo"] = {
+                    "target_id": "subject",
+                    "light_id": None,
+                    "center": list(p_ctr),
+                    "axis_x": list(p_x),
+                    "axis_y": list(p_y),
+                    "axis_z": list(p_z),
+                    "rot_pitch": list(p_pitch),
+                    "rot_yaw": list(p_yaw),
+                    "rot_roll": list(p_roll),
+                    "scale_uniform": list(p_scale),
+                    "ground_contact": list(p_gnd),
+                    "ground_gap_m": pmeta["ground_gap_m"],
+                    "contact_state": pmeta["contact_state"]
                 }
 
         # Project Subject
@@ -515,9 +570,83 @@ class StudioAppController:
     ) -> None:
         """
         Projects screen pixel dragging along a 3D gizmo axis into true world-space displacement.
+        Supports both area lights and subject proxy geometry with near-parallel singularity protection.
         """
         target_id = light_id or self.selected_object_id
         scene = self.current_scene
+
+        # --- SUBJECT PROXY EDITING ---
+        if target_id == "subject":
+            subj = scene.subject
+            cam_pos, to_screen, right, cam_up, fwd, f_len = self._get_stage_projector(canvas_w, canvas_h)
+            p0 = np.array(subj.position, dtype=np.float32)
+            s0, _ = to_screen(p0)
+
+            ax = axis.upper()
+            if ax in ("X", "Y", "Z"):
+                dir_map = {
+                    "X": np.array([1.0, 0.0, 0.0], dtype=np.float32),
+                    "Y": np.array([0.0, 1.0, 0.0], dtype=np.float32),
+                    "Z": np.array([0.0, 0.0, 1.0], dtype=np.float32)
+                }
+                v_dir = dir_map[ax]
+                p1 = p0 + v_dir
+                s1, _ = to_screen(p1)
+
+                sv = np.array([s1[0] - s0[0], s1[1] - s0[1]], dtype=np.float32)
+                length = float(np.linalg.norm(sv))
+                if length >= 4.0:
+                    u_dir = sv / length
+                    mouse_disp = np.array([delta_screen_x, delta_screen_y], dtype=np.float32)
+                    dist_m = float(np.dot(mouse_disp, u_dir) / length)
+                else:
+                    # Near-parallel singularity protection: fall back to vertical mouse drag
+                    dist_m = float(-delta_screen_y * 0.005)
+
+                if ax == "X":
+                    subj.position[0] = round(subj.position[0] + dist_m, 3)
+                elif ax == "Y":
+                    subj.position[1] = round(subj.position[1] + dist_m, 3)
+                elif ax == "Z":
+                    subj.position[2] = round(subj.position[2] + dist_m, 3)
+
+            elif ax == "PITCH":
+                delta_pitch = -delta_screen_y * 0.5
+                subj.rotation_deg[0] = max(-180.0, min(180.0, round(subj.rotation_deg[0] + delta_pitch, 1)))
+
+            elif ax == "YAW":
+                delta_yaw = delta_screen_x * 0.5
+                subj.rotation_deg[1] = round((subj.rotation_deg[1] + delta_yaw) % 360.0, 1)
+                if subj.rotation_deg[1] > 180.0:
+                    subj.rotation_deg[1] -= 360.0
+
+            elif ax == "ROLL":
+                delta_roll = delta_screen_x * 0.5
+                subj.rotation_deg[2] = round((subj.rotation_deg[2] + delta_roll) % 360.0, 1)
+                if subj.rotation_deg[2] > 180.0:
+                    subj.rotation_deg[2] -= 360.0
+
+            elif ax in ("SCALE", "UNIFORM_SCALE"):
+                delta_scale = (delta_screen_x - delta_screen_y) * 0.005
+                factor = max(0.1, 1.0 + delta_scale)
+                subj.dimensions = [max(0.01, round(d * factor, 3)) for d in subj.dimensions]
+
+            elif ax == "WIDTH":
+                delta_w = delta_screen_x * 0.005
+                subj.dimensions[0] = max(0.01, round(subj.dimensions[0] + delta_w, 3))
+
+            elif ax == "HEIGHT":
+                delta_h = -delta_screen_y * 0.005
+                subj.dimensions[1] = max(0.01, round(subj.dimensions[1] + delta_h, 3))
+
+            elif ax == "DEPTH":
+                delta_d = delta_screen_x * 0.005
+                subj.dimensions[2] = max(0.01, round(subj.dimensions[2] + delta_d, 3))
+
+            self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+            return
+
+        # --- AREA LIGHT EDITING ---
         light = scene.get_light(target_id)
         if not light:
             return
@@ -539,19 +668,21 @@ class StudioAppController:
 
             # Screen vector corresponding to 1 meter in 3D
             sv = np.array([s1[0] - s0[0], s1[1] - s0[1]], dtype=np.float32)
-            length = np.linalg.norm(sv)
-            if length > 1e-3:
+            length = float(np.linalg.norm(sv))
+            if length >= 4.0:
                 u_dir = sv / length
                 mouse_disp = np.array([delta_screen_x, delta_screen_y], dtype=np.float32)
-                # Projected distance in meters
                 dist_m = float(np.dot(mouse_disp, u_dir) / length)
-                
-                if ax == "X":
-                    light.position[0] = round(light.position[0] + dist_m, 3)
-                elif ax == "Y":
-                    light.position[1] = max(0.0, round(light.position[1] + dist_m, 3))
-                elif ax == "Z":
-                    light.position[2] = round(light.position[2] + dist_m, 3)
+            else:
+                # Near-parallel singularity protection: fall back to vertical mouse drag
+                dist_m = float(-delta_screen_y * 0.005)
+            
+            if ax == "X":
+                light.position[0] = round(light.position[0] + dist_m, 3)
+            elif ax == "Y":
+                light.position[1] = max(0.0, round(light.position[1] + dist_m, 3))
+            elif ax == "Z":
+                light.position[2] = round(light.position[2] + dist_m, 3)
 
         elif ax == "PITCH":
             delta_pitch = -delta_screen_y * 0.5
@@ -562,6 +693,12 @@ class StudioAppController:
             light.rotation_deg[1] = round((light.rotation_deg[1] + delta_yaw) % 360.0, 1)
             if light.rotation_deg[1] > 180.0:
                 light.rotation_deg[1] -= 360.0
+
+        elif ax == "ROLL":
+            delta_roll = delta_screen_x * 0.5
+            light.rotation_deg[2] = round((light.rotation_deg[2] + delta_roll) % 360.0, 1)
+            if light.rotation_deg[2] > 180.0:
+                light.rotation_deg[2] -= 360.0
 
         elif ax == "WIDTH":
             delta_w = delta_screen_x * 0.01
@@ -675,9 +812,12 @@ class StudioAppController:
         self,
         proxy_type: Optional[str] = None,
         dimensions: Optional[List[float]] = None,
-        position_y: Optional[float] = None
+        position: Optional[List[float]] = None,
+        position_y: Optional[float] = None,
+        rotation_deg: Optional[List[float]] = None,
+        scale: Optional[List[float]] = None
     ) -> None:
-        """Updates subject proxy geometry type, dimensions, and ground elevation."""
+        """Updates subject proxy geometry type, dimensions, position, rotation, and scale."""
         scene = self.current_scene
         if proxy_type is not None:
             pt = str(proxy_type).upper().strip()
@@ -687,12 +827,35 @@ class StudioAppController:
                 pt = "SUPERQUADRIC"
             scene.subject.proxy_type = ProxyType(pt)
         if dimensions is not None:
-            scene.subject.dimensions = [float(d) for d in dimensions]
-        if position_y is not None:
+            scene.subject.dimensions = [max(0.01, float(d)) for d in dimensions]
+        if position is not None:
+            scene.subject.position = [float(p) for p in position]
+        elif position_y is not None:
             scene.subject.position[1] = float(position_y)
+        if rotation_deg is not None:
+            scene.subject.rotation_deg = [float(r) for r in rotation_deg]
+        if scale is not None:
+            scene.subject.scale = [max(0.01, float(s)) for s in scale]
 
+        scene.subject.validate()
         self.state_manager.push_state(scene)
         self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def snap_subject_to_ground(self) -> float:
+        """Adjusts subject elevation so its lowest point rests precisely on the receiver ground."""
+        scene = self.current_scene
+        new_pos = snap_proxy_to_ground(
+            position=scene.subject.position,
+            dimensions=scene.subject.dimensions,
+            rotation_euler=scene.subject.rotation_deg,
+            scale=scene.subject.scale,
+            ground_y=scene.receiver.ground_y,
+            proxy_type=scene.subject.proxy_type.value
+        )
+        scene.subject.position = new_pos
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+        return new_pos[1]
 
     def update_receiver_params(
         self,
@@ -703,11 +866,17 @@ class StudioAppController:
     ) -> None:
         """Updates background receiver geometry (plane vs cyclorama)."""
         scene = self.current_scene
-        scene.receiver.receiver_type = ReceiverType(receiver_type)
+        if isinstance(receiver_type, str):
+            try:
+                scene.receiver.receiver_type = ReceiverType(receiver_type.upper())
+            except ValueError:
+                scene.receiver.receiver_type = ReceiverType(receiver_type)
+        else:
+            scene.receiver.receiver_type = receiver_type
         if ground_y is not None:
             scene.receiver.ground_y = float(ground_y)
         if cove_radius is not None:
-            scene.receiver.cove_radius = float(cove_radius)
+            scene.receiver.cove_radius = max(0.05, float(cove_radius))
         if wall_z is not None:
             scene.receiver.wall_z = float(wall_z)
 
@@ -852,11 +1021,25 @@ class StudioAppController:
 
         if sel_id == "subject":
             mat = scene.subject.material
+            pmeta = compute_proxy_geometry_meta(
+                proxy_type=scene.subject.proxy_type.value,
+                position=scene.subject.position,
+                dimensions=scene.subject.dimensions,
+                rotation_euler=scene.subject.rotation_deg,
+                scale=scene.subject.scale,
+                ground_y=scene.receiver.ground_y
+            )
             return {
                 "type": "subject",
                 "proxy_type": scene.subject.proxy_type.value,
-                "dimensions": scene.subject.dimensions,
+                "position": scene.subject.position,
                 "position_y": scene.subject.position[1],
+                "rotation_deg": scene.subject.rotation_deg,
+                "dimensions": scene.subject.dimensions,
+                "scale": scene.subject.scale,
+                "ground_gap_m": pmeta["ground_gap_m"],
+                "contact_state": pmeta["contact_state"],
+                "lowest_y": pmeta["lowest_y"],
                 "roughness": mat.roughness,
                 "metallic": mat.metallic,
                 "specular_f0": mat.specular_f0,
@@ -887,13 +1070,17 @@ class StudioAppController:
 
         # Camera
         cam = scene.camera
+        dist = round(float(np.linalg.norm(np.array(cam.pos, dtype=np.float32) - np.array(cam.target, dtype=np.float32))), 3)
         return {
             "type": "camera",
             "pos": cam.pos,
             "target": cam.target,
             "fov_deg": cam.fov_deg,
+            "focal_length_mm": getattr(cam, "focal_length_mm", fov_to_focal_length_mm(cam.fov_deg)),
             "width": cam.width,
-            "height": cam.height
+            "height": cam.height,
+            "elevation": cam.pos[1],
+            "distance": dist
         }
 
     def render_3d_stage_canvas(
@@ -1058,9 +1245,535 @@ class StudioAppController:
                 # Center handle
                 cv2.circle(canvas, p_ctr, 5, (255, 255, 255), -1, cv2.LINE_AA)
 
+        # 7. Interactive 3D Transform Gizmo on Selected Subject Proxy
+        if draw_gizmo and is_subj_selected:
+            g_pos = np.array(scene.subject.position, dtype=np.float32)
+            p_ctr, v_ctr = to_screen(g_pos)
+            if v_ctr:
+                axis_len = 0.50
+                # X-axis (Red)
+                p_x, v_x = to_screen(g_pos + np.array([axis_len, 0.0, 0.0]))
+                if v_x:
+                    cv2.line(canvas, p_ctr, p_x, (0, 0, 240), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_x, 6, (0, 0, 255), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "X", (p_x[0] + 6, p_x[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 240), 1)
+
+                # Y-axis (Green)
+                p_y, v_y = to_screen(g_pos + np.array([0.0, axis_len, 0.0]))
+                if v_y:
+                    cv2.line(canvas, p_ctr, p_y, (0, 220, 0), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_y, 6, (0, 255, 0), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "Y", (p_y[0] + 6, p_y[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 0), 1)
+
+                # Z-axis (Blue)
+                p_z, v_z = to_screen(g_pos + np.array([0.0, 0.0, axis_len]))
+                if v_z:
+                    cv2.line(canvas, p_ctr, p_z, (240, 60, 0), 3, cv2.LINE_AA)
+                    cv2.circle(canvas, p_z, 6, (255, 80, 0), -1, cv2.LINE_AA)
+                    cv2.putText(canvas, "Z", (p_z[0] + 6, p_z[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (240, 60, 0), 1)
+
+                # Center handle
+                cv2.circle(canvas, p_ctr, 5, (255, 255, 255), -1, cv2.LINE_AA)
+
+                # Ground drop-line and contact marker
+                pmeta = compute_proxy_geometry_meta(
+                    proxy_type=scene.subject.proxy_type.value,
+                    position=scene.subject.position,
+                    dimensions=scene.subject.dimensions,
+                    rotation_euler=scene.subject.rotation_deg,
+                    scale=scene.subject.scale,
+                    ground_y=scene.receiver.ground_y
+                )
+                p_pt, v_pt = to_screen(np.array(pmeta["contact_point_world"], dtype=np.float32))
+                p_mk, v_mk = to_screen(np.array(pmeta["ground_marker_world"], dtype=np.float32))
+                if v_pt and v_mk:
+                    cv2.line(canvas, p_pt, p_mk, (0, 255, 120), 1, cv2.LINE_AA)
+                    cv2.circle(canvas, p_mk, 5, (0, 255, 120), 1, cv2.LINE_AA)
+
         # Studio Stage HUD overlay
         cv2.putText(canvas, "3D VIRTUAL STUDIO STAGE", (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1)
         cv2.putText(canvas, f"Orbit: Yaw {self.stage_orbit_yaw_deg:.0f} deg | Pitch {self.stage_orbit_pitch_deg:.0f} deg | Dist {self.stage_orbit_dist:.1f}m",
                     (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (120, 120, 125), 1)
 
         return canvas
+
+    # -----------------------------------------------------------------------
+    # 4. CAMERA MATCHING & PHOTOGRAPHIC ALIGNMENT OVERLAYS
+    # -----------------------------------------------------------------------
+
+    def update_camera_params(
+        self,
+        pos: Optional[List[float]] = None,
+        target: Optional[List[float]] = None,
+        fov_deg: Optional[float] = None,
+        focal_length_mm: Optional[float] = None,
+        elevation: Optional[float] = None,
+        distance: Optional[float] = None,
+        pitch_deg: Optional[float] = None,
+        yaw_deg: Optional[float] = None
+    ) -> None:
+        """
+        Updates photograph perspective camera pose and lens parameters.
+        Synchronizes vertical FOV (degrees) and 35mm full-frame focal length (mm).
+        """
+        scene = self.current_scene
+        cam = scene.camera
+
+        if focal_length_mm is not None:
+            cam.focal_length_mm = float(focal_length_mm)
+            cam.fov_deg = focal_length_to_fov_deg(cam.focal_length_mm)
+        elif fov_deg is not None:
+            cam.fov_deg = max(1.0, min(170.0, float(fov_deg)))
+            cam.focal_length_mm = fov_to_focal_length_mm(cam.fov_deg)
+
+        if pos is not None:
+            cam.pos = [float(p) for p in pos]
+        if target is not None:
+            cam.target = [float(t) for t in target]
+
+        if elevation is not None:
+            cam.pos[1] = float(elevation)
+
+        if distance is not None:
+            cur_pos = np.array(cam.pos, dtype=np.float32)
+            cur_tgt = np.array(cam.target, dtype=np.float32)
+            diff = cur_pos - cur_tgt
+            d = np.linalg.norm(diff)
+            if d > 1e-4:
+                new_pos = cur_tgt + (diff / d) * max(0.1, float(distance))
+                cam.pos = [round(float(v), 3) for v in new_pos]
+
+        if pitch_deg is not None or yaw_deg is not None:
+            cur_pos = np.array(cam.pos, dtype=np.float32)
+            cur_tgt = np.array(cam.target, dtype=np.float32)
+            d = max(0.1, float(np.linalg.norm(cur_pos - cur_tgt)))
+            p_rad = math.radians(float(pitch_deg if pitch_deg is not None else 15.0))
+            y_rad = math.radians(float(yaw_deg if yaw_deg is not None else 0.0))
+            new_pos = cur_tgt + d * np.array([
+                math.sin(y_rad) * math.cos(p_rad),
+                math.sin(p_rad),
+                math.cos(y_rad) * math.cos(p_rad)
+            ], dtype=np.float32)
+            cam.pos = [round(float(v), 3) for v in new_pos]
+
+        cam.validate()
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def apply_camera_preset(self, preset_name: str) -> float:
+        """
+        Applies a verified 35mm full-frame camera lens focal length preset:
+        - 24mm (Ultra-wide / Environmental) -> FOV ~53.13 deg
+        - 35mm (Standard wide / Editorial)   -> FOV ~37.85 deg
+        - 50mm (Normal / Commercial default) -> FOV ~27.00 deg
+        - 85mm (Portrait telephoto)          -> FOV ~16.08 deg
+        - 105mm (Macro / Detail telephoto)   -> FOV ~13.04 deg
+        """
+        preset_clean = str(preset_name).lower().replace("mm", "").strip()
+        preset_map = {
+            "24": 24.0,
+            "35": 35.0,
+            "50": 50.0,
+            "85": 85.0,
+            "105": 105.0
+        }
+        fl = preset_map.get(preset_clean, 50.0)
+        self.update_camera_params(focal_length_mm=fl)
+        return fl
+
+    def fit_camera_to_subject(self, frame_ratio: float = 0.65) -> float:
+        """
+        Positions camera along its current line of sight so the subject proxy bounding box
+        occupies frame_ratio (default 65%) of the camera frame height.
+        """
+        scene = self.current_scene
+        cam = scene.camera
+        subj = scene.subject
+        dims = np.array(subj.dimensions, dtype=np.float32) * np.array(subj.scale, dtype=np.float32)
+        h = float(dims[1] * 2.0)
+
+        fov_rad = math.radians(cam.fov_deg)
+        dist = h / (2.0 * frame_ratio * math.tan(fov_rad / 2.0))
+        dist = max(0.5, dist)
+
+        cam.target = [round(float(v), 3) for v in subj.position]
+        cur_pos = np.array(cam.pos, dtype=np.float32)
+        diff = cur_pos - np.array(cam.target, dtype=np.float32)
+        d_cur = np.linalg.norm(diff)
+        if d_cur > 1e-4:
+            new_pos = np.array(cam.target) + (diff / d_cur) * dist
+        else:
+            new_pos = np.array(cam.target) + np.array([0.0, 0.3 * dist, dist])
+
+        cam.pos = [round(float(v), 3) for v in new_pos]
+        cam.validate()
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+        return round(dist, 3)
+
+    def reset_camera_photo(self) -> None:
+        """Resets camera to standard perspective photograph defaults."""
+        scene = self.current_scene
+        cam = scene.camera
+        cam.pos = [0.0, 1.2, 2.5]
+        cam.target = [0.0, 0.35, 0.0]
+        cam.up = [0.0, 1.0, 0.0]
+        cam.focal_length_mm = 50.0
+        cam.fov_deg = focal_length_to_fov_deg(50.0)
+        cam.validate()
+        self.state_manager.push_state(scene)
+        self.request_render(quality=RenderQuality.PREVIEW, async_mode=True)
+
+    def get_alignment_projection_meta(
+        self,
+        canvas_w: Optional[int] = None,
+        canvas_h: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Projects 3D scene elements directly into Photograph Viewport 2D coordinates:
+        - 3D Proxy wireframe corners and edges
+        - 2D silhouette polygon
+        - Horizon vanishing line
+        - Ground grid lines
+        - Ground contact point & marker
+        - Cyclorama cove fillet transition
+        - Alignment diagnostics (IoU, coverage, bounding box deltas, ground gap)
+        """
+        scene = self.current_scene
+        W = int(canvas_w or scene.camera.width or 1024)
+        H = int(canvas_h or scene.camera.height or 768)
+
+        cam = Camera3D(
+            width=W,
+            height=H,
+            pos=scene.camera.pos,
+            target=scene.camera.target,
+            up=scene.camera.up,
+            fov_deg=scene.camera.fov_deg
+        )
+
+        proxy_meta = compute_proxy_geometry_meta(
+            proxy_type=scene.subject.proxy_type.value,
+            position=scene.subject.position,
+            dimensions=scene.subject.dimensions,
+            rotation_euler=scene.subject.rotation_deg,
+            scale=scene.subject.scale,
+            ground_y=scene.receiver.ground_y
+        )
+
+        # 1. Project 8 bounding corners
+        corners_screen = []
+        corners_visible = []
+        for pt in proxy_meta["corners_world"]:
+            px, py, cam_z = cam.project_point(np.array(pt, dtype=np.float32))
+            corners_screen.append([round(px, 1), round(py, 1)])
+            corners_visible.append(cam_z > 1e-3 and -W <= px <= 2 * W and -H <= py <= 2 * H)
+
+        # 2. Project silhouette sample points and compute 2D convex hull
+        pts_2d = []
+        for pt in proxy_meta["silhouette_samples_world"]:
+            px, py, cam_z = cam.project_point(np.array(pt, dtype=np.float32))
+            if cam_z > 1e-3:
+                pts_2d.append([px, py])
+
+        silhouette_polygon = []
+        if len(pts_2d) >= 3:
+            hull = cv2.convexHull(np.array(pts_2d, dtype=np.float32).reshape((-1, 1, 2)))
+            silhouette_polygon = [[round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in hull]
+
+        # 3. Horizon vanishing line across photographic plate
+        fwd_vec = cam.forward
+        d_horiz = np.array([fwd_vec[0], 0.0, fwd_vec[2]], dtype=np.float32)
+        norm_d = float(np.linalg.norm(d_horiz))
+        horizon_line = []
+        if norm_d > 1e-4:
+            d_horiz /= norm_d
+            r_horiz = np.array([-d_horiz[2], 0.0, d_horiz[0]], dtype=np.float32)
+            p_ctr_inf = np.array(cam.pos, dtype=np.float32) + 10000.0 * d_horiz
+            p_left = p_ctr_inf - 10000.0 * r_horiz
+            p_right = p_ctr_inf + 10000.0 * r_horiz
+            pl_x, pl_y, zl = cam.project_point(p_left)
+            pr_x, pr_y, zr = cam.project_point(p_right)
+            if zl > 1e-3 and zr > 1e-3 and abs(pr_x - pl_x) > 1e-3:
+                slope = (pr_y - pl_y) / (pr_x - pl_x)
+                y0 = pl_y - slope * pl_x
+                yW = y0 + slope * float(W)
+                horizon_line = [
+                    [0.0, round(float(y0), 1)],
+                    [float(W), round(float(yW), 1)]
+                ]
+            else:
+                horizon_line = [[0.0, round(float(cam.cy), 1)], [float(W), round(float(cam.cy), 1)]]
+        else:
+            horizon_line = [[0.0, round(float(cam.cy), 1)], [float(W), round(float(cam.cy), 1)]]
+
+        # 4. Ground Contact Marker
+        g_marker_3d = np.array(proxy_meta["ground_marker_world"], dtype=np.float32)
+        px_g, py_g, z_g = cam.project_point(g_marker_3d)
+        ground_contact_screen = [round(px_g, 1), round(py_g, 1)] if z_g > 1e-3 else None
+
+        # 5. Ground Grid Lines on Floor Plane
+        g_y = float(scene.receiver.ground_y)
+        ground_grid = []
+        # Longitudinal lines (parallel to Z)
+        for x_val in [-1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5]:
+            p1_x, p1_y, z1 = cam.project_point(np.array([x_val, g_y, -0.5], dtype=np.float32))
+            p2_x, p2_y, z2 = cam.project_point(np.array([x_val, g_y, 2.5], dtype=np.float32))
+            if z1 > 1e-3 and z2 > 1e-3:
+                ground_grid.append([[round(p1_x, 1), round(p1_y, 1)], [round(p2_x, 1), round(p2_y, 1)]])
+
+        # Latitudinal lines (parallel to X)
+        for z_val in [-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5]:
+            p1_x, p1_y, z1 = cam.project_point(np.array([-1.5, g_y, z_val], dtype=np.float32))
+            p2_x, p2_y, z2 = cam.project_point(np.array([1.5, g_y, z_val], dtype=np.float32))
+            if z1 > 1e-3 and z2 > 1e-3:
+                ground_grid.append([[round(p1_x, 1), round(p1_y, 1)], [round(p2_x, 1), round(p2_y, 1)]])
+
+        # 6. Cyclorama transition line
+        cyclorama_transition = None
+        if scene.receiver.receiver_type == ReceiverType.CYCLORAMA:
+            cove_z = float(scene.receiver.wall_z + scene.receiver.cove_radius)
+            cp1_x, cp1_y, cz1 = cam.project_point(np.array([-2.0, g_y, cove_z], dtype=np.float32))
+            cp2_x, cp2_y, cz2 = cam.project_point(np.array([2.0, g_y, cove_z], dtype=np.float32))
+            if cz1 > 1e-3 and cz2 > 1e-3:
+                cyclorama_transition = [[round(cp1_x, 1), round(cp1_y, 1)], [round(cp2_x, 1), round(cp2_y, 1)]]
+
+        # 7. Alignment Diagnostics (IoU, coverage, bounding box delta, ground gap)
+        diagnostics = self.compute_alignment_diagnostics(
+            W=W,
+            H=H,
+            silhouette_poly=silhouette_polygon,
+            ground_gap_m=proxy_meta["ground_gap_m"]
+        )
+
+        return {
+            "image_width": W,
+            "image_height": H,
+            "corners_screen": corners_screen,
+            "corners_visible": corners_visible,
+            "edges": proxy_meta["edges"],
+            "silhouette_polygon": silhouette_polygon,
+            "horizon_line": horizon_line,
+            "ground_contact_screen": ground_contact_screen,
+            "ground_grid": ground_grid,
+            "cyclorama_transition": cyclorama_transition,
+            "proxy_type": scene.subject.proxy_type.value,
+            "ground_gap_m": proxy_meta["ground_gap_m"],
+            "contact_state": proxy_meta["contact_state"],
+            "lowest_y": proxy_meta["lowest_y"],
+            "camera_focal_length_mm": getattr(scene.camera, "focal_length_mm", fov_to_focal_length_mm(scene.camera.fov_deg)),
+            "camera_fov_deg": scene.camera.fov_deg,
+            "diagnostics": diagnostics
+        }
+
+    def compute_alignment_diagnostics(
+        self,
+        W: int,
+        H: int,
+        silhouette_poly: List[List[float]],
+        ground_gap_m: float
+    ) -> Dict[str, Any]:
+        """
+        Computes quantitative alignment diagnostics between the projected proxy silhouette
+        and the photograph foreground segmentation mask (fg_mask).
+        """
+        contact_state = "contact" if abs(ground_gap_m) <= 0.005 else ("hovering" if ground_gap_m > 0 else "penetrating")
+
+        if len(silhouette_poly) < 3 or not self.project or self.project.fg_mask is None:
+            return {
+                "silhouette_iou": 1.0 if len(silhouette_poly) >= 3 else 0.0,
+                "foreground_coverage": 1.0 if len(silhouette_poly) >= 3 else 0.0,
+                "bbox_delta_px": [0, 0, 0, 0],
+                "ground_gap_m": round(float(ground_gap_m), 4),
+                "contact_state": contact_state,
+                "has_fg_mask": False
+            }
+
+        poly_mask = np.zeros((H, W), dtype=np.uint8)
+        pts = np.array(silhouette_poly, dtype=np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(poly_mask, [pts], 255)
+
+        fg = self.project.fg_mask
+        if fg.shape[:2] != (H, W):
+            fg = cv2.resize(fg.astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST) > 0
+        else:
+            fg = fg > 0
+
+        poly_bool = (poly_mask > 0)
+        intersection = np.logical_and(poly_bool, fg).sum()
+        union = np.logical_or(poly_bool, fg).sum()
+        fg_sum = fg.sum()
+
+        iou = float(intersection / max(1, union))
+        coverage = float(intersection / max(1, fg_sum))
+
+        # Bounding box comparison
+        y_poly, x_poly = np.where(poly_bool)
+        y_fg, x_fg = np.where(fg)
+
+        if len(x_poly) > 0 and len(x_fg) > 0:
+            poly_box = [int(x_poly.min()), int(y_poly.min()), int(x_poly.max()), int(y_poly.max())]
+            fg_box = [int(x_fg.min()), int(y_fg.min()), int(x_fg.max()), int(y_fg.max())]
+            bbox_delta = [
+                int(poly_box[0] - fg_box[0]),
+                int(poly_box[1] - fg_box[1]),
+                int(poly_box[2] - fg_box[2]),
+                int(poly_box[3] - fg_box[3])
+            ]
+        else:
+            bbox_delta = [0, 0, 0, 0]
+
+        return {
+            "silhouette_iou": round(iou, 4),
+            "foreground_coverage": round(coverage, 4),
+            "bbox_delta_px": bbox_delta,
+            "ground_gap_m": round(float(ground_gap_m), 4),
+            "contact_state": contact_state,
+            "has_fg_mask": True
+        }
+
+    def render_photograph_with_overlay(
+        self,
+        mode: str = "relit",
+        opacity: float = 0.5,
+        width: Optional[int] = None,
+        height: Optional[int] = None
+    ) -> np.ndarray:
+        """
+        Renders photographic viewport image with chosen alignment overlay:
+        - 'original': unmodified source photograph
+        - 'relit': virtual lighting rendered composite
+        - 'wireframe': 3D proxy edges projected on photo
+        - 'silhouette': semi-transparent proxy polygon overlay
+        - 'guides': horizon line, ground grid, and ground contact marker
+        - 'mismatch': color-coded IoU diagnostic heatmap (Green=match, Red=under, Blue=over)
+        """
+        if not self.project or self.project.img_orig_srgb is None:
+            return np.full((480, 640, 3), 40, dtype=np.uint8)
+
+        orig_uint8 = np.clip(self.project.img_orig_srgb * 255.0, 0, 255).astype(np.uint8)
+        bgr_base = cv2.cvtColor(orig_uint8, cv2.COLOR_RGB2BGR)
+        H, W = bgr_base.shape[:2]
+
+        if width and height and (W != width or H != height):
+            bgr_base = cv2.resize(bgr_base, (width, height), interpolation=cv2.INTER_LINEAR)
+            H, W = height, width
+
+        m = str(mode).lower().strip()
+        if m == "original":
+            return cv2.cvtColor(bgr_base, cv2.COLOR_BGR2RGB)
+
+        if m == "relit":
+            out = self.project.last_render_output
+            img_arr = out.get("composite") if out else None
+            if img_arr is None and out and "relit_srgb" in out:
+                img_arr = out["relit_srgb"]
+            if img_arr is not None:
+                img_relit = np.clip(img_arr * 255.0, 0, 255).astype(np.uint8)
+                if img_relit.shape[:2] != (H, W):
+                    img_relit = cv2.resize(img_relit, (W, H), interpolation=cv2.INTER_LINEAR)
+                return img_relit
+            return cv2.cvtColor(bgr_base, cv2.COLOR_BGR2RGB)
+
+        meta = self.get_alignment_projection_meta(canvas_w=W, canvas_h=H)
+        alpha = max(0.0, min(1.0, float(opacity)))
+
+        if m == "wireframe":
+            canvas = bgr_base.copy()
+            c_screen = meta["corners_screen"]
+            c_vis = meta["corners_visible"]
+            edges = meta["edges"]
+            for e1, e2 in edges:
+                if c_vis[e1] or c_vis[e2]:
+                    pt1 = (int(c_screen[e1][0]), int(c_screen[e1][1]))
+                    pt2 = (int(c_screen[e2][0]), int(c_screen[e2][1]))
+                    cv2.line(canvas, pt1, pt2, (0, 240, 255), 2, cv2.LINE_AA)
+            for i, pt in enumerate(c_screen):
+                if c_vis[i]:
+                    cv2.circle(canvas, (int(pt[0]), int(pt[1])), 4, (0, 255, 255), -1, cv2.LINE_AA)
+            result = cv2.addWeighted(canvas, alpha, bgr_base, 1.0 - alpha, 0)
+            return cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+
+        if m == "silhouette":
+            canvas = bgr_base.copy()
+            poly = meta["silhouette_polygon"]
+            if len(poly) >= 3:
+                pts = np.array(poly, dtype=np.int32).reshape((-1, 1, 2))
+                overlay = bgr_base.copy()
+                cv2.fillPoly(overlay, [pts], (255, 200, 0))
+                cv2.polylines(overlay, [pts], True, (255, 240, 100), 2, cv2.LINE_AA)
+                canvas = cv2.addWeighted(overlay, alpha, bgr_base, 1.0 - alpha, 0)
+            return cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+
+        if m == "guides":
+            canvas = bgr_base.copy()
+            # 1. Horizon line (Gold)
+            h_line = meta["horizon_line"]
+            if h_line:
+                p1 = (int(h_line[0][0]), int(h_line[0][1]))
+                p2 = (int(h_line[1][0]), int(h_line[1][1]))
+                cv2.line(canvas, p1, p2, (0, 215, 255), 2, cv2.LINE_AA)
+                cv2.putText(canvas, "HORIZON", (15, max(20, min(H - 10, p1[1] - 8))),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 215, 255), 1)
+
+            # 2. Ground Grid
+            for g_seg in meta["ground_grid"]:
+                p1 = (int(g_seg[0][0]), int(g_seg[0][1]))
+                p2 = (int(g_seg[1][0]), int(g_seg[1][1]))
+                cv2.line(canvas, p1, p2, (180, 150, 40), 1, cv2.LINE_AA)
+
+            # 3. Cyclorama transition
+            if meta["cyclorama_transition"]:
+                c1 = (int(meta["cyclorama_transition"][0][0]), int(meta["cyclorama_transition"][0][1]))
+                c2 = (int(meta["cyclorama_transition"][1][0]), int(meta["cyclorama_transition"][1][1]))
+                cv2.line(canvas, c1, c2, (200, 120, 255), 1, cv2.LINE_AA)
+                cv2.putText(canvas, "COVE", (c1[0] + 10, c1[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 120, 255), 1)
+
+            # 4. Ground Contact Marker
+            gc = meta["ground_contact_screen"]
+            if gc:
+                pt_gc = (int(gc[0]), int(gc[1]))
+                cv2.circle(canvas, pt_gc, 8, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.drawMarker(canvas, pt_gc, (0, 255, 0), cv2.MARKER_CROSS, 16, 2)
+                gap_text = f"Gap: {meta['ground_gap_m']:.3f}m ({meta['contact_state']})"
+                cv2.putText(canvas, gap_text, (pt_gc[0] + 12, pt_gc[1] + 4),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.40, (0, 255, 0), 1)
+
+            result = cv2.addWeighted(canvas, alpha, bgr_base, 1.0 - alpha, 0)
+            return cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+
+        if m == "mismatch":
+            poly = meta["silhouette_polygon"]
+            mask_poly = np.zeros((H, W), dtype=np.uint8)
+            if len(poly) >= 3:
+                pts = np.array(poly, dtype=np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(mask_poly, [pts], 255)
+
+            fg = self.project.fg_mask
+            if fg is not None:
+                if fg.shape[:2] != (H, W):
+                    mask_fg = (cv2.resize(fg.astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST) > 0)
+                else:
+                    mask_fg = (fg > 0)
+            else:
+                mask_fg = (mask_poly > 0)
+
+            p_bool = (mask_poly > 0)
+            overlay = bgr_base.copy()
+            # Match (both true): Green (0, 230, 0)
+            match_mask = (p_bool & mask_fg)
+            overlay[match_mask] = (overlay[match_mask] * 0.4 + np.array([0, 230, 0]) * 0.6).astype(np.uint8)
+            # Under-coverage (fg true, poly false): Red (0, 0, 240)
+            under_mask = (~p_bool & mask_fg)
+            overlay[under_mask] = (overlay[under_mask] * 0.4 + np.array([0, 0, 240]) * 0.6).astype(np.uint8)
+            # Over-coverage (poly true, fg false): Blue (240, 100, 0)
+            over_mask = (p_bool & ~mask_fg)
+            overlay[over_mask] = (overlay[over_mask] * 0.4 + np.array([240, 100, 0]) * 0.6).astype(np.uint8)
+
+            result = cv2.addWeighted(overlay, alpha, bgr_base, 1.0 - alpha, 0)
+            diag = meta["diagnostics"]
+            cv2.putText(result, f"IoU: {diag['silhouette_iou']:.2f} | Coverage: {diag['foreground_coverage']:.2f}",
+                        (15, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            return cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+
+        return cv2.cvtColor(bgr_base, cv2.COLOR_BGR2RGB)
