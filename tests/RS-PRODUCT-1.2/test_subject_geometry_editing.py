@@ -133,6 +133,32 @@ def test_snap_to_ground_obb():
     )
     assert abs(pmeta["ground_gap_m"]) < 1e-3
     assert pmeta["contact_state"] == "contact"
+
+
+def test_snap_to_ground_superquadric_with_non_unity_exponents():
+    """Verify superquadric snap-to-ground accounts for non-unity shape exponents (e1=0.8, e2=0.5)."""
+    ctrl = StudioAppController()
+    subj = ctrl.current_scene.subject
+    subj.proxy_type = ProxyType.SUPERQUADRIC
+    subj.dimensions = [0.30, 0.40, 0.35]
+    subj.sq_exponents = [0.8, 0.5]
+    subj.rotation_deg = [25.0, 35.0, -15.0]
+    subj.position = [0.0, 2.0, 0.0]
+
+    ctrl.snap_subject_to_ground()
+    pmeta = compute_proxy_geometry_meta(
+        proxy_type="SUPERQUADRIC",
+        position=subj.position,
+        dimensions=subj.dimensions,
+        rotation_euler=subj.rotation_deg,
+        scale=subj.scale,
+        ground_y=ctrl.current_scene.receiver.ground_y,
+        sq_exponents=subj.sq_exponents
+    )
+    assert abs(pmeta["ground_gap_m"]) < 1e-3
+    assert pmeta["contact_state"] == "contact"
+    assert abs(pmeta["lowest_y"] - ctrl.current_scene.receiver.ground_y) < 1e-3
+
     assert abs(pmeta["lowest_y"] - ctrl.current_scene.receiver.ground_y) < 1e-3
 
 
@@ -156,4 +182,30 @@ def test_snap_to_ground_superquadric():
     )
     assert abs(pmeta["ground_gap_m"]) < 1e-3
     assert pmeta["contact_state"] == "contact"
+
+
+def test_snap_to_ground_superquadric_with_non_unity_exponents():
+    """Verify superquadric snap-to-ground accounts for non-unity shape exponents (e1=0.8, e2=0.5)."""
+    ctrl = StudioAppController()
+    subj = ctrl.current_scene.subject
+    subj.proxy_type = ProxyType.SUPERQUADRIC
+    subj.dimensions = [0.30, 0.40, 0.35]
+    subj.sq_exponents = [0.8, 0.5]
+    subj.rotation_deg = [25.0, 35.0, -15.0]
+    subj.position = [0.0, 2.0, 0.0]
+
+    ctrl.snap_subject_to_ground()
+    pmeta = compute_proxy_geometry_meta(
+        proxy_type="SUPERQUADRIC",
+        position=subj.position,
+        dimensions=subj.dimensions,
+        rotation_euler=subj.rotation_deg,
+        scale=subj.scale,
+        ground_y=ctrl.current_scene.receiver.ground_y,
+        sq_exponents=subj.sq_exponents
+    )
+    assert abs(pmeta["ground_gap_m"]) < 1e-3
+    assert pmeta["contact_state"] == "contact"
+    assert abs(pmeta["lowest_y"] - ctrl.current_scene.receiver.ground_y) < 1e-3
+
 

@@ -1,0 +1,41 @@
+{
+  "condition_A_default": {
+    "iou": 0.4562,
+    "coverage": 0.4678,
+    "bbox_delta_px": [
+      91,
+      314,
+      -90,
+      -132
+    ],
+    "tp_pixels": 147815,
+    "fp_pixels": 8056,
+    "fn_pixels": 168137
+  },
+  "condition_B_standard_workflow": {
+    "iou": 0.6412,
+    "coverage": 0.9983,
+    "bbox_delta_px": [
+      0,
+      121,
+      0,
+      109
+    ],
+    "tp_pixels": 315406,
+    "fp_pixels": 175922,
+    "fn_pixels": 546
+  },
+  "condition_C_best_achievable": {
+    "iou": 0.6611,
+    "coverage": 0.7968,
+    "bbox_delta_px": [
+      15,
+      310,
+      -15,
+      56
+    ],
+    "tp_pixels": 251759,
+    "fp_pixels": 64867,
+    "fn_pixels": 64193
+  }
+}

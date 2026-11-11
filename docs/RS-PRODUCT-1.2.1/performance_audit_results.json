@@ -1,0 +1,116 @@
+{
+  "system_info": {
+    "chip": "Apple M5 (10 cores: 4 Super, 6 Efficiency)",
+    "gpu": "10-core Apple M5 GPU, Metal 4",
+    "memory": "16 GB Unified Memory",
+    "os": "macOS 27.0 (Build 26A428)"
+  },
+  "preview_1024x576": {
+    "1_lights": {
+      "host_p50_ms": 4.5,
+      "host_p95_ms": 5.0,
+      "host_p99_ms": 5.08,
+      "host_min_ms": 3.87,
+      "host_max_ms": 5.11,
+      "host_mean_ms": 4.47,
+      "fps_p50": 222.2,
+      "gpu_avg_ms": 1.93
+    },
+    "4_lights": {
+      "host_p50_ms": 4.75,
+      "host_p95_ms": 5.07,
+      "host_p99_ms": 5.13,
+      "host_min_ms": 4.18,
+      "host_max_ms": 5.16,
+      "host_mean_ms": 4.71,
+      "fps_p50": 210.6,
+      "gpu_avg_ms": 2.16
+    },
+    "8_lights": {
+      "host_p50_ms": 5.39,
+      "host_p95_ms": 5.67,
+      "host_p99_ms": 5.81,
+      "host_min_ms": 4.73,
+      "host_max_ms": 5.87,
+      "host_mean_ms": 5.36,
+      "fps_p50": 185.6,
+      "gpu_avg_ms": 2.77
+    }
+  },
+  "true_1080p_final": {
+    "1_lights": {
+      "host_p50_ms": 14.7,
+      "host_p95_ms": 15.25,
+      "host_p99_ms": 15.35,
+      "host_min_ms": 14.21,
+      "host_max_ms": 15.36,
+      "host_mean_ms": 14.67,
+      "fps_p50": 68.0,
+      "gpu_avg_ms": 7.98
+    },
+    "4_lights": {
+      "host_p50_ms": 24.89,
+      "host_p95_ms": 25.17,
+      "host_p99_ms": 25.21,
+      "host_min_ms": 23.98,
+      "host_max_ms": 25.22,
+      "host_mean_ms": 24.82,
+      "fps_p50": 40.2,
+      "gpu_avg_ms": 17.68
+    },
+    "8_lights": {
+      "host_p50_ms": 37.28,
+      "host_p95_ms": 38.05,
+      "host_p99_ms": 38.12,
+      "host_min_ms": 36.43,
+      "host_max_ms": 38.14,
+      "host_mean_ms": 37.29,
+      "fps_p50": 26.8,
+      "gpu_avg_ms": 30.2
+    }
+  },
+  "true_1080p_preview": {
+    "1_lights": {
+      "host_p50_ms": 13.13,
+      "host_p95_ms": 13.65,
+      "host_p99_ms": 13.82,
+      "host_min_ms": 12.14,
+      "host_max_ms": 13.83,
+      "host_mean_ms": 13.0,
+      "fps_p50": 76.2,
+      "gpu_avg_ms": 6.28
+    },
+    "4_lights": {
+      "host_p50_ms": 14.27,
+      "host_p95_ms": 15.45,
+      "host_p99_ms": 17.46,
+      "host_min_ms": 13.63,
+      "host_max_ms": 18.14,
+      "host_mean_ms": 14.45,
+      "fps_p50": 70.1,
+      "gpu_avg_ms": 7.3
+    },
+    "8_lights": {
+      "host_p50_ms": 16.41,
+      "host_p95_ms": 16.95,
+      "host_p99_ms": 16.99,
+      "host_min_ms": 15.39,
+      "host_max_ms": 17.0,
+      "host_mean_ms": 16.43,
+      "fps_p50": 60.9,
+      "gpu_avg_ms": 9.52
+    }
+  },
+  "reconciliation_nike_576x1024": {
+    "1_light_final": {
+      "host_p50_ms": 4.76,
+      "host_p95_ms": 5.05,
+      "host_p99_ms": 5.1,
+      "host_min_ms": 4.2,
+      "host_max_ms": 5.12,
+      "host_mean_ms": 4.74,
+      "fps_p50": 209.9,
+      "gpu_avg_ms": 2.55
+    }
+  }
+}

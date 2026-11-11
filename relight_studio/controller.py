@@ -522,7 +522,8 @@ class StudioAppController:
                     dimensions=scene.subject.dimensions,
                     rotation_euler=scene.subject.rotation_deg,
                     scale=scene.subject.scale,
-                    ground_y=scene.receiver.ground_y
+                    ground_y=scene.receiver.ground_y,
+                    sq_exponents=scene.subject.sq_exponents
                 )
                 p_gnd, _ = to_screen(np.array(pmeta["ground_marker_world"], dtype=np.float32))
 
@@ -850,7 +851,8 @@ class StudioAppController:
             rotation_euler=scene.subject.rotation_deg,
             scale=scene.subject.scale,
             ground_y=scene.receiver.ground_y,
-            proxy_type=scene.subject.proxy_type.value
+            proxy_type=scene.subject.proxy_type.value,
+            sq_exponents=scene.subject.sq_exponents
         )
         scene.subject.position = new_pos
         self.state_manager.push_state(scene)
@@ -1027,7 +1029,8 @@ class StudioAppController:
                 dimensions=scene.subject.dimensions,
                 rotation_euler=scene.subject.rotation_deg,
                 scale=scene.subject.scale,
-                ground_y=scene.receiver.ground_y
+                ground_y=scene.receiver.ground_y,
+                sq_exponents=scene.subject.sq_exponents
             )
             return {
                 "type": "subject",
@@ -1282,7 +1285,8 @@ class StudioAppController:
                     dimensions=scene.subject.dimensions,
                     rotation_euler=scene.subject.rotation_deg,
                     scale=scene.subject.scale,
-                    ground_y=scene.receiver.ground_y
+                    ground_y=scene.receiver.ground_y,
+                    sq_exponents=scene.subject.sq_exponents
                 )
                 p_pt, v_pt = to_screen(np.array(pmeta["contact_point_world"], dtype=np.float32))
                 p_mk, v_mk = to_screen(np.array(pmeta["ground_marker_world"], dtype=np.float32))
@@ -1458,7 +1462,8 @@ class StudioAppController:
             dimensions=scene.subject.dimensions,
             rotation_euler=scene.subject.rotation_deg,
             scale=scene.subject.scale,
-            ground_y=scene.receiver.ground_y
+            ground_y=scene.receiver.ground_y,
+            sq_exponents=scene.subject.sq_exponents
         )
 
         # 1. Project 8 bounding corners

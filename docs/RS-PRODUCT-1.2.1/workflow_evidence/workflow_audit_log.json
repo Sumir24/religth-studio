@@ -1,0 +1,115 @@
+[
+  {
+    "step": 1,
+    "name": "Open Relight Studio",
+    "status": "PASS"
+  },
+  {
+    "step": 2,
+    "name": "Import photograph",
+    "sha256": "0e9b08a4011562c8b6ef88fde24eecf1359a72a34f59e9793e7494a63e934059",
+    "status": "PASS"
+  },
+  {
+    "step": 3,
+    "name": "Initialize virtual scene",
+    "status": "PASS"
+  },
+  {
+    "step": 4,
+    "name": "Change focal length to 85mm",
+    "focal_length_mm": 85.0,
+    "status": "PASS"
+  },
+  {
+    "step": 5,
+    "name": "Fit camera to subject",
+    "status": "PASS"
+  },
+  {
+    "step": 6,
+    "name": "Adjust proxy dimensions",
+    "dims": [
+      0.38,
+      0.22,
+      0.18
+    ],
+    "status": "PASS"
+  },
+  {
+    "step": 7,
+    "name": "Move subject",
+    "status": "PASS"
+  },
+  {
+    "step": 8,
+    "name": "Rotate Pitch (X=15)",
+    "status": "PASS"
+  },
+  {
+    "step": 9,
+    "name": "Rotate Yaw (Y=-30)",
+    "status": "PASS"
+  },
+  {
+    "step": 10,
+    "name": "Rotate Roll (Z=10)",
+    "status": "PASS"
+  },
+  {
+    "step": 11,
+    "name": "Align receiver",
+    "status": "PASS"
+  },
+  {
+    "step": 12,
+    "name": "Snap subject to ground",
+    "new_y": 0.0696,
+    "ground_gap_m": -0.0,
+    "status": "PASS"
+  },
+  {
+    "step": 13,
+    "name": "Enable wireframe overlay",
+    "status": "PASS"
+  },
+  {
+    "step": 14,
+    "name": "Enable silhouette overlay",
+    "status": "PASS"
+  },
+  {
+    "step": 15,
+    "name": "Inspect mismatch",
+    "iou": 0.4986,
+    "status": "PASS"
+  },
+  {
+    "step": 16,
+    "name": "Move virtual light",
+    "status": "PASS"
+  },
+  {
+    "step": 17,
+    "name": "Observe lighting changes",
+    "max_delta": 22.0,
+    "mean_delta": 5.014754118742766,
+    "status": "PASS"
+  },
+  {
+    "step": 18,
+    "name": "Save project",
+    "bundle_path": "/var/folders/xf/6w22jftx7dd64d1zyxbmt7gc0000gn/T/tmpmp4n4tm3/audit_test.relight",
+    "status": "PASS"
+  },
+  {
+    "step": 19,
+    "name": "Reopen project",
+    "status": "PASS"
+  },
+  {
+    "step": 20,
+    "name": "Verify restored scene state",
+    "status": "PASS"
+  }
+]

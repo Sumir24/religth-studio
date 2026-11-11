@@ -586,7 +586,8 @@ def compute_proxy_geometry_meta(
     dimensions: Tuple[float, float, float] | List[float] | np.ndarray,
     rotation_euler: Tuple[float, float, float] | List[float] | np.ndarray,
     scale: Tuple[float, float, float] | List[float] | np.ndarray = (1.0, 1.0, 1.0),
-    ground_y: float = 0.0
+    ground_y: float = 0.0,
+    sq_exponents: Tuple[float, float] | List[float] = (1.0, 1.0)
 ) -> dict:
     """
     Computes exact 3D bounding geometry, lowest world elevation, ground contact point,
@@ -618,32 +619,55 @@ def compute_proxy_geometry_meta(
     ]
 
     pt_type = str(proxy_type).upper()
+    e1, e2 = float(sq_exponents[0]), float(sq_exponents[1])
+    is_pure_ellipsoid = (pt_type == "SPHERE") or (pt_type == "SUPERQUADRIC" and abs(e1 - 1.0) < 1e-3 and abs(e2 - 1.0) < 1e-3)
+
     if pt_type in ("SUPERQUADRIC", "SPHERE"):
-        # Analytical vertical half-extent for ellipsoid under rotation R:
-        # delta_y = sqrt((R_10 * rx)^2 + (R_11 * ry)^2 + (R_12 * rz)^2)
-        delta_y = math.sqrt((R[1, 0] * dims[0])**2 + (R[1, 1] * dims[1])**2 + (R[1, 2] * dims[2])**2)
-        lowest_y = float(pos[1] - delta_y)
+        if is_pure_ellipsoid:
+            # Analytical vertical half-extent for ellipsoid under rotation R:
+            # delta_y = sqrt((R_10 * rx)^2 + (R_11 * ry)^2 + (R_12 * rz)^2)
+            delta_y = math.sqrt((R[1, 0] * dims[0])**2 + (R[1, 1] * dims[1])**2 + (R[1, 2] * dims[2])**2)
+            lowest_y = float(pos[1] - delta_y)
 
-        # Contact point in local space has outward normal parallel to -Y_world
-        v_down = np.array([-R[1, 0], -R[1, 1], -R[1, 2]], dtype=np.float32)
-        w = dims * v_down
-        w_len = np.linalg.norm(w)
-        if w_len > 1e-6:
-            p_local = (dims * dims * v_down) / w_len
-            contact_pt_world = pos + R @ p_local
-            contact_pt_world[1] = lowest_y
+            # Contact point in local space has outward normal parallel to -Y_world
+            v_down = np.array([-R[1, 0], -R[1, 1], -R[1, 2]], dtype=np.float32)
+            w = dims * v_down
+            w_len = np.linalg.norm(w)
+            if w_len > 1e-6:
+                p_local = (dims * dims * v_down) / w_len
+                contact_pt_world = pos + R @ p_local
+                contact_pt_world[1] = lowest_y
+            else:
+                contact_pt_world = np.array([pos[0], lowest_y, pos[2]], dtype=np.float32)
+
+            u = np.linspace(0.0, 2.0 * np.pi, 16, endpoint=False, dtype=np.float32)
+            v = np.linspace(-np.pi / 2.0, np.pi / 2.0, 9, dtype=np.float32)
+            uu, vv = np.meshgrid(u, v)
+            xs = (dims[0] * np.cos(vv) * np.cos(uu)).flatten()
+            ys = (dims[1] * np.sin(vv)).flatten()
+            zs = (dims[2] * np.cos(vv) * np.sin(uu)).flatten()
+            surf_local = np.stack([xs, ys, zs], axis=-1)
+            silhouette_samples_world = pos + surf_local @ R.T
         else:
-            contact_pt_world = np.array([pos[0], lowest_y, pos[2]], dtype=np.float32)
+            # General Superquadric surface sampling with signed power
+            u = np.linspace(0.0, 2.0 * np.pi, 24, endpoint=False, dtype=np.float32)
+            v = np.linspace(-np.pi / 2.0, np.pi / 2.0, 13, dtype=np.float32)
+            uu, vv = np.meshgrid(u, v)
 
-        # Generate sample points on ellipsoid surface for silhouette projection
-        u = np.linspace(0.0, 2.0 * np.pi, 16, endpoint=False, dtype=np.float32)
-        v = np.linspace(-np.pi / 2.0, np.pi / 2.0, 9, dtype=np.float32)
-        uu, vv = np.meshgrid(u, v)
-        xs = (dims[0] * np.cos(vv) * np.cos(uu)).flatten()
-        ys = (dims[1] * np.sin(vv)).flatten()
-        zs = (dims[2] * np.cos(vv) * np.sin(uu)).flatten()
-        surf_local = np.stack([xs, ys, zs], axis=-1)
-        silhouette_samples_world = pos + surf_local @ R.T
+            cu = np.sign(np.cos(uu)) * np.power(np.abs(np.cos(uu)), e2)
+            su = np.sign(np.sin(uu)) * np.power(np.abs(np.sin(uu)), e2)
+            cv = np.sign(np.cos(vv)) * np.power(np.abs(np.cos(vv)), e1)
+            sv = np.sign(np.sin(vv)) * np.power(np.abs(np.sin(vv)), e1)
+
+            xs = (dims[0] * cv * cu).flatten()
+            ys = (dims[1] * sv).flatten()
+            zs = (dims[2] * cv * su).flatten()
+            surf_local = np.stack([xs, ys, zs], axis=-1)
+            silhouette_samples_world = pos + surf_local @ R.T
+
+            lowest_y = float(np.min(silhouette_samples_world[:, 1]))
+            min_idx = int(np.argmin(silhouette_samples_world[:, 1]))
+            contact_pt_world = silhouette_samples_world[min_idx].copy()
 
     else:  # OBB or MESH
         lowest_y = float(np.min(corners_world[:, 1]))
@@ -680,7 +704,8 @@ def snap_proxy_to_ground(
     rotation_euler: Tuple[float, float, float] | List[float] | np.ndarray,
     scale: Tuple[float, float, float] | List[float] | np.ndarray = (1.0, 1.0, 1.0),
     ground_y: float = 0.0,
-    proxy_type: str = "OBB"
+    proxy_type: str = "OBB",
+    sq_exponents: Tuple[float, float] | List[float] = (1.0, 1.0)
 ) -> List[float]:
     """
     Computes new position vector [X, Y, Z] with Y adjusted so the lowest point of the proxy
@@ -692,7 +717,8 @@ def snap_proxy_to_ground(
         dimensions=dimensions,
         rotation_euler=rotation_euler,
         scale=scale,
-        ground_y=ground_y
+        ground_y=ground_y,
+        sq_exponents=sq_exponents
     )
     new_y = float(position[1]) - meta["ground_gap_m"]
     return [round(float(position[0]), 4), round(new_y, 4), round(float(position[2]), 4)]
