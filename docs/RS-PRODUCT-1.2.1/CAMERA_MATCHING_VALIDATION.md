@@ -76,3 +76,4 @@ An independent test was executed across 1,000 random points in the camera frustu
 - **50mm Normal Screenshot:** `docs/RS-PRODUCT-1.2/screenshots/03_camera_preset_50mm_normal.png`
 - **85mm Portrait Screenshot:** `docs/RS-PRODUCT-1.2/screenshots/04_camera_preset_85mm_portrait.png`
 - **Fit Camera Framing:** `docs/RS-PRODUCT-1.2/screenshots/05_camera_framing_fit_to_subject.png`
+

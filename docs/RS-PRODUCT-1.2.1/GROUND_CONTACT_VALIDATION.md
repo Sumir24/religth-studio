@@ -80,3 +80,4 @@ Contact state transitions reliably:
 - Before snap (hovering at $y=2.0$): `gap = 1.427m`, state = `"hovering"`
 - After snap: `gap = 0.0000m`, state = `"contact"` (green badge)
 - Submerged: `gap = -0.050m`, state = `"penetrating"` (red warning)
+

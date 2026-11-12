@@ -64,3 +64,4 @@ In Condition B (the standard 1.2 result):
 For RS-PRODUCT-1.3, Relight Studio should introduce:
 1. **Compound Multi-Part Proxies:** Combining 2 or 3 bounding volumes (e.g. Sole Box + Collar Ellipsoid) to capture concave geometry without requiring artist 3D sculpting.
 2. **Artist Mesh Import:** Allowing artists to drop low-poly `.obj` proxy models into the scene for complex subjects.
+

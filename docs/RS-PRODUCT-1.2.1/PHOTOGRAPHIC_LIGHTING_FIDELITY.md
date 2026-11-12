@@ -57,3 +57,4 @@ All scenarios were independently analyzed:
 - Evaluated background pixels outside the receiver and subject proxy when `protected_mask` is active:
   - Maximum absolute pixel difference in protected regions: **$0.000000$**.
   - Photographic pixels outside the relit geometry remain completely bit-exact to the original source plate.
+

@@ -72,3 +72,4 @@ On Apple Silicon with Unified Memory Architecture (UMA):
   - $1024 \times 576$: $1.9 - 2.8\,\text{ms}$.
   - $1920 \times 1080$ (32 MC, 8 lights): $30.2\,\text{ms}$.
 - **Zero-Copy Readback:** `MTLResourceStorageModeShared` allows the Python host to read pixel buffers directly from GPU memory without PCIe copy overhead.
+

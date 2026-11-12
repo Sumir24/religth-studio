@@ -44,3 +44,4 @@ with idle periods, gc collection checkpoints, repeated scene open/save cycles, a
 - **Metal Buffers:** `g_buffer_pool` tracks `alloc_count` and reuses existing memory when $W \times H$ matches.
 - **Undo History:** Bounded to 50 entries by `_max_history = 50` in `SceneStateManager`. Oldest snapshots are popped and released.
 - **Open/Close Project Cycles:** Repeatedly saving and loading `.relight` bundles across 20 cycles resulted in net RSS variation of $< 15\,\text{MB}$, confirming clean teardown and re-instantiation of project assets.
+
